@@ -1,6 +1,9 @@
 package gov.nasa.jpf.symbc.veritesting.ast.visitors;
 
 
+import gov.nasa.jpf.symbc.numeric.RealInfinity;
+import gov.nasa.jpf.symbc.numeric.RealNaN;
+import gov.nasa.jpf.symbc.numeric.RealZero;
 import gov.nasa.jpf.symbc.veritesting.ast.def.*;
 import za.ac.sun.cs.green.expr.*;
 
