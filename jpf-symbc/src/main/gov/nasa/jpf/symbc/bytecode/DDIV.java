@@ -54,36 +54,31 @@ import gov.nasa.jpf.vm.Types;
  */
 public class DDIV extends gov.nasa.jpf.jvm.bytecode.DDIV {
 
-	
-	
-	
     @Override
     public Instruction execute(ThreadInfo th) {
-    	
+
         StackFrame sf = th.getModifiableTopFrame();
 
         RealExpression sym_v1 = (RealExpression) sf.getOperandAttr(1);
         double v1 = sf.peekDouble();
         RealExpression sym_v2 = (RealExpression) sf.getOperandAttr(3);
         double v2 = sf.peekDouble(2);
-        //super.execute should take care of if(v1==0) return th.createAndThrowException
         if (sym_v1 == null) {
             Instruction next_insn = super.execute(th);
-        	
+
             if (sym_v2 != null) // result is symbolic expression
                 sf.setLongOperandAttr(sym_v2._div(v1));
             return next_insn;
         }
 
-        // div by zero check affects path condition
-        // sym_v1 is non-null and should be checked against zero
+        // div by zero / NaN / Inf check affects path condition
+        // sym_v1 is non-null and should be checked against zero, NaN, and Inf
 
-        
         ChoiceGenerator<?> cg;
-        boolean condition;
+        int choice;
 
         if (!th.isFirstStepInsn()) { // first time around
-            cg = new PCChoiceGenerator(SymbolicInstructionFactory.collect_constraints ? 1 : 2);
+            cg = new PCChoiceGenerator(SymbolicInstructionFactory.collect_constraints ? 1 : 4);
             ((PCChoiceGenerator) cg).setOffset(this.position);
             ((PCChoiceGenerator) cg).setMethodName(this.getMethodInfo().getFullName());
             th.getVM().setNextChoiceGenerator(cg);
@@ -93,21 +88,24 @@ public class DDIV extends gov.nasa.jpf.jvm.bytecode.DDIV {
             assert (cg instanceof PCChoiceGenerator) : "expected PCChoiceGenerator, got: " + cg;
 
             if (SymbolicInstructionFactory.collect_constraints) {
-                condition = v1 == 0; // i.e. false
-                ((PCChoiceGenerator) cg).select(condition ? 1 : 0); // YN: set the choice correctly
+                if (v1 == 0)
+                    choice = 0;
+                else if (Double.isNaN(v1))
+                    choice = 1;
+                else if (Double.isInfinite(v1))
+                    choice = 2;
+                else
+                    choice = 3;
+                ((PCChoiceGenerator) cg).select(choice);
             } else {
-                condition = (Integer) cg.getNextChoice() == 0 ? false : true;
+                choice = (Integer) cg.getNextChoice();
             }
         }
 
-        
         //super.execute(th); // pops v1, v2 and pushes r = v2 / v1;
         sf.popDouble();
         sf.popDouble();
-        if(v1==0)
-        	sf.pushDouble(0.0);
-        else
-        	sf.pushDouble(v2/v1);
+        sf.pushDouble(v2/v1);
 
         PathCondition pc;
         ChoiceGenerator<?> prev_cg = cg.getPreviousChoiceGeneratorOfType(PCChoiceGenerator.class);
@@ -119,37 +117,53 @@ public class DDIV extends gov.nasa.jpf.jvm.bytecode.DDIV {
 
         assert pc != null;
 
-        if (condition) { // check div by zero
-        	
+        // ------------------------------------------------------------
+        // 4-branch choice generator for DDIV (IEEE 754 semantics).
+        //
+        // Java's floating-point division (double) does NOT throw
+        // ArithmeticException on division by zero — it yields +-Inf or
+        // NaN per IEEE 754.  The symbolic path condition must therefore
+        // explore all four mutually-exclusive cases for the divisor:
+        //
+        //   choice 0:  divisor == 0       -> EQ sym_v1 0
+        //   choice 1:  divisor is NaN     -> IS_NAN sym_v1
+        //   choice 2:  divisor is Inf     -> IS_INF sym_v1
+        //   choice 3:  normal divisor     -> NE sym_v1 0  ∧  NOT_IS_NAN sym_v1
+        //                                    ∧  NOT_IS_INF sym_v1
+        //
+        // The old code short-circuited div-by-zero by pushing 0.0,
+        // which was incorrect for IEEE 754 and prevented the symbolic
+        // engine from exploring paths that produce Infinity/NaN results.
+        // ------------------------------------------------------------
+        if (choice == 0) { // zero divisor
             pc._addDet(Comparator.EQ, sym_v1, 0);
-            if (pc.simplify()) { // satisfiable
-                ((PCChoiceGenerator) cg).setCurrentPC(pc);
-                
-                return th.createAndThrowException("java.lang.ArithmeticException", "!!!div by 0");
-            } else {
-                th.getVM().getSystemState().setIgnored(true);
-                return getNext(th);
-            }
-        } else {
+        } else if (choice == 1) { // NaN divisor
+            pc._addDet(sym_v1, Comparator.IS_NAN);
+        } else if (choice == 2) { // Inf divisor
+            pc._addDet(sym_v1, Comparator.IS_INF);
+        } else { // normal divisor (non-zero, non-NaN, non-Inf)
             pc._addDet(Comparator.NE, sym_v1, 0);
-            if (pc.simplify()) { // satisfiable
-                ((PCChoiceGenerator) cg).setCurrentPC(pc);
+            pc._addDet(sym_v1, Comparator.NOT_IS_NAN);
+            pc._addDet(sym_v1, Comparator.NOT_IS_INF);
+        }
 
-                // set the result
-                RealExpression result;
-                if (sym_v2 != null)
-                    result = sym_v2._div(sym_v1);
-                else
-                    result = sym_v1._div_reverse(v2);
+        if (pc.simplify()) { // satisfiable
+            ((PCChoiceGenerator) cg).setCurrentPC(pc);
 
-                sf = th.getModifiableTopFrame();
-                sf.setLongOperandAttr(result);
-                return getNext(th);
+            // set the result
+            RealExpression result;
+            if (sym_v2 != null)
+                result = sym_v2._div(sym_v1);
+            else
+                result = sym_v1._div_reverse(v2);
 
-            } else {
-                th.getVM().getSystemState().setIgnored(true);
-                return getNext(th);
-            }
+            sf = th.getModifiableTopFrame();
+            sf.setLongOperandAttr(result);
+            return getNext(th);
+
+        } else {
+            th.getVM().getSystemState().setIgnored(true);
+            return getNext(th);
         }
 
     }

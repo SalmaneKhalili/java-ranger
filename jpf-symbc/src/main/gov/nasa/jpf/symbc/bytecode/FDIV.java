@@ -26,7 +26,6 @@ import gov.nasa.jpf.vm.ChoiceGenerator;
 import gov.nasa.jpf.vm.Instruction;
 import gov.nasa.jpf.vm.StackFrame;
 import gov.nasa.jpf.vm.ThreadInfo;
-import gov.nasa.jpf.vm.Types;
 
 /**
  * YN: fixed choice selection in symcrete support (Yannic Noller <nolleryc@gmail.com>)
@@ -42,9 +41,6 @@ public class FDIV extends gov.nasa.jpf.jvm.bytecode.FDIV {
         float v1 = sf.peekFloat(0);
         RealExpression sym_v2 = (RealExpression) sf.getOperandAttr(1);
         float v2 = sf.peekFloat(1);
-        if (v1 == 0)
-            return th.createAndThrowException("java.lang.ArithmeticException", "div by 0");
-
         if (sym_v1 == null) {
             Instruction next_insn = super.execute(th);
             if (sym_v2 != null) // result is symbolic expression
@@ -52,14 +48,14 @@ public class FDIV extends gov.nasa.jpf.jvm.bytecode.FDIV {
             return next_insn;
         }
 
-        // div by zero check affects path condition
-        // sym_v1 is non-null and should be checked against zero
+        // div by zero / NaN / Inf check affects path condition
+        // sym_v1 is non-null and should be checked against zero, NaN, and Inf
 
         ChoiceGenerator<?> cg;
-        boolean condition;
+        int choice;
 
         if (!th.isFirstStepInsn()) { // first time around
-            cg = new PCChoiceGenerator(SymbolicInstructionFactory.collect_constraints ? 1 : 2);
+            cg = new PCChoiceGenerator(SymbolicInstructionFactory.collect_constraints ? 1 : 4);
             ((PCChoiceGenerator) cg).setOffset(this.position);
             ((PCChoiceGenerator) cg).setMethodName(this.getMethodInfo().getFullName());
             th.getVM().getSystemState().setNextChoiceGenerator(cg);
@@ -68,10 +64,17 @@ public class FDIV extends gov.nasa.jpf.jvm.bytecode.FDIV {
             cg = th.getVM().getSystemState().getChoiceGenerator();
             assert (cg instanceof PCChoiceGenerator) : "expected PCChoiceGenerator, got: " + cg;
             if (SymbolicInstructionFactory.collect_constraints) {
-                condition = v1 == 0; // i.e. false
-                ((PCChoiceGenerator) cg).select(condition ? 1 : 0); // YN: set the choice correctly
+                if (v1 == 0)
+                    choice = 0;
+                else if (Float.isNaN(v1))
+                    choice = 1;
+                else if (Float.isInfinite(v1))
+                    choice = 2;
+                else
+                    choice = 3;
+                ((PCChoiceGenerator) cg).select(choice);
             } else {
-                condition = (Integer) cg.getNextChoice() == 0 ? false : true;
+                choice = (Integer) cg.getNextChoice();
             }
         }
 
@@ -87,38 +90,55 @@ public class FDIV extends gov.nasa.jpf.jvm.bytecode.FDIV {
 
         assert pc != null;
 
-        if (condition) { // check div by zero
+        // ------------------------------------------------------------
+        // 4-branch choice generator for FDIV (IEEE 754 semantics).
+        //
+        // Java's floating-point division (float) does NOT throw
+        // ArithmeticException on division by zero — it yields +-Inf or
+        // NaN per IEEE 754.  The symbolic path condition must therefore
+        // explore all four mutually-exclusive cases for the divisor:
+        //
+        //   choice 0:  divisor == 0       → EQ sym_v1 0
+        //   choice 1:  divisor is NaN     → IS_NAN sym_v1
+        //   choice 2:  divisor is Inf     → IS_INF sym_v1
+        //   choice 3:  normal divisor     → NE sym_v1 0  ∧  NOT_IS_NAN sym_v1
+        //                                    ∧  NOT_IS_INF sym_v1
+        //
+        // The old code short-circuited div-by-zero with a concrete
+        // exception, which was incorrect for IEEE 754 and prevented
+        // the symbolic engine from exploring paths that produce
+        // Infinity/NaN results.
+        // ------------------------------------------------------------
+        if (choice == 0) { // zero divisor
             pc._addDet(Comparator.EQ, sym_v1, 0);
-            if (pc.simplify()) { // satisfiable
-                ((PCChoiceGenerator) cg).setCurrentPC(pc);
-
-                return th.createAndThrowException("java.lang.ArithmeticException", "div by 0");
-            } else {
-                th.getVM().getSystemState().setIgnored(true);
-                return getNext(th);
-            }
-        } else {
+        } else if (choice == 1) { // NaN divisor
+            pc._addDet(sym_v1, Comparator.IS_NAN);
+        } else if (choice == 2) { // Inf divisor
+            pc._addDet(sym_v1, Comparator.IS_INF);
+        } else { // normal divisor (non-zero, non-NaN, non-Inf)
             pc._addDet(Comparator.NE, sym_v1, 0);
-            if (pc.simplify()) { // satisfiable
-                ((PCChoiceGenerator) cg).setCurrentPC(pc);
-
-                // set the result
-                RealExpression result;
-                if (sym_v2 != null)
-                    result = sym_v2._div(sym_v1);
-                else
-                    result = sym_v1._div_reverse(v2);
-
-                sf = th.getModifiableTopFrame();
-                sf.setOperandAttr(result);
-                return getNext(th);
-
-            } else {
-                th.getVM().getSystemState().setIgnored(true);
-                return getNext(th);
-            }
+            pc._addDet(sym_v1, Comparator.NOT_IS_NAN);
+            pc._addDet(sym_v1, Comparator.NOT_IS_INF);
         }
 
+        if (pc.simplify()) { // satisfiable
+            ((PCChoiceGenerator) cg).setCurrentPC(pc);
+
+            // set the result
+            RealExpression result;
+            if (sym_v2 != null)
+                result = sym_v2._div(sym_v1);
+            else
+                result = sym_v1._div_reverse(v2);
+
+            sf = th.getModifiableTopFrame();
+            sf.setOperandAttr(result);
+            return getNext(th);
+
+        } else {
+            th.getVM().getSystemState().setIgnored(true);
+            return getNext(th);
+        }
     }
 
 }
