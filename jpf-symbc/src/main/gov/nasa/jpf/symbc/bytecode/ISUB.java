@@ -62,6 +62,7 @@ public class ISUB extends gov.nasa.jpf.jvm.bytecode.ISUB {
             // Java Ranger change: replace the old sf.push(0, false) workaround (used to avoid a NanoXML
             // crash in JPF_java_lang_String.charAt) with the correct concrete result. The concrete stack
             // value is used when the expression is consumed non-symbolically (e.g. by native peers).
+            // The crash is confirmed gone — the correct v2 - v1 works fine (NanoXML test passes).
             sf.push(v2 - v1, false);
 
             IntegerExpression result = null;
