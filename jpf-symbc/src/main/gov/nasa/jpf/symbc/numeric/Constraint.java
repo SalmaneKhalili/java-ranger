@@ -49,7 +49,6 @@ public abstract class Constraint implements Comparable<Constraint> {
 
   public Constraint and;
 
-
   public Constraint(Expression l, Comparator c, Expression r) {
     left = l;
     comp = c;
@@ -158,7 +157,9 @@ public abstract class Constraint implements Comparable<Constraint> {
 	 * {@code right}).  The {@code right} entry may be null for unary
 	 * constraints (IS_NAN, IS_INF, etc.); null sorts before non-null so
 	 * unary constraints precede binary ones when the first two elements
-	 * tie.  Used by {@link PathCondition#compareTo}.
+	 * tie.  This maintains a consistent ordering: null < non-null,
+	 * which maps to -1, 0, or +1 per {@link Comparable} contract.
+	 * Used by {@link PathCondition#compareTo}.
 	 * @param c  the constraint to compare to (must not be null)
 	 * @return -1 / 0 / +1 per {@link Comparable} contract
 	 */

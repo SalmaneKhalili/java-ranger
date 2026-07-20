@@ -296,11 +296,12 @@ public class ProblemZ3BitVector extends ProblemGeneral {
                     BoolExpr inBounds = ctx.mkAnd(
                         ctx.mkFPGEq(expr, ctx.mkFP(min, ctx.mkFPSort32())),
                         ctx.mkFPLEq(expr, ctx.mkFP(max, ctx.mkFPSort32())));
-                    BoolExpr isNaN = ctx.mkFPIsNaN(expr);
                     if (SymbolicInstructionFactory.inf){
+                        BoolExpr isNaN = ctx.mkFPIsNaN(expr);
                         BoolExpr isInfinity = ctx.mkFPIsInfinite(expr);
                         solver.add(ctx.mkOr(inBounds, isNaN, isInfinity));
                     } else {
+                        BoolExpr isNaN = ctx.mkFPIsNaN(expr);
                         solver.add(ctx.mkOr(inBounds, isNaN));
                     }
 
@@ -310,11 +311,12 @@ public class ProblemZ3BitVector extends ProblemGeneral {
                     BoolExpr inBounds = ctx.mkAnd(
                         ctx.mkFPGEq(expr, ctx.mkFP(min, ctx.mkFPSortDouble())),
                         ctx.mkFPLEq(expr, ctx.mkFP(max, ctx.mkFPSortDouble())));
-                    BoolExpr isNaN = ctx.mkFPIsNaN(expr);
                     if (SymbolicInstructionFactory.inf){
+                        BoolExpr isNaN = ctx.mkFPIsNaN(expr);
                         BoolExpr isInfinity = ctx.mkFPIsInfinite(expr);
                         solver.add(ctx.mkOr(inBounds, isNaN, isInfinity));
                     } else {
+                        BoolExpr isNaN = ctx.mkFPIsNaN(expr);
                         solver.add(ctx.mkOr(inBounds, isNaN));
                     }
                     return expr;
