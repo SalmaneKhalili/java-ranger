@@ -920,12 +920,82 @@ public class ProblemZ3BitVector extends ProblemGeneral {
         try {
             if (exp1 instanceof BitVecExpr && exp2 instanceof BitVecExpr) {
                 return ctx.mkBVSRem((BitVecExpr) exp1, (BitVecExpr) exp2);
+            } else if (useFpForReals) {
+                return ctx.mkFPRem((FPExpr) exp1, (FPExpr) exp2);
             } else {
                 throw new RuntimeException();
             }
         } catch (Exception e) {
             e.printStackTrace();
             throw new RuntimeException("## Error Z3: rem(Object, Object) failed.\n" + e);
+        }
+    }
+
+    public Object rem(double value, Object exp) {
+        try {
+            if (useFpForReals) {
+                FPSort sort = this.bitVectorLength == 32 ? ctx.mkFPSort32() : ctx.mkFPSort64();
+                return ctx.mkFPRem(ctx.mkFPNumeral(value, sort), (FPExpr) exp);
+            } else {
+                throw new RuntimeException();
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("## Error Z3: rem(double, Object) failed.\n" + e);
+        }
+    }
+
+    public Object rem(Object exp, double value) {
+        try {
+            if (useFpForReals) {
+                FPSort sort = this.bitVectorLength == 32 ? ctx.mkFPSort32() : ctx.mkFPSort64();
+                return ctx.mkFPRem((FPExpr) exp, ctx.mkFPNumeral(value, sort));
+            } else {
+                throw new RuntimeException();
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("## Error Z3: rem(Object, double) failed.\n" + e);
+        }
+    }
+
+    private int freshVarCount = 0;
+
+    /**
+     * Symbolic model for Math.sin(double).
+     * Approach: introduce a fresh FP constant per call site, constrained
+     * to sin's valid output range [-1, 1]. Deliberately decorrelated from
+     * the input (no UF, no axioms) — cheapest possible sound model.
+     */
+    public Object sin(Object exp) {
+        try {
+            if (useFpForReals) {
+                FPSort sort = this.bitVectorLength == 32 ? ctx.mkFPSort32() : ctx.mkFPSort64();
+
+                FPExpr result = (FPExpr) ctx.mkConst("__sin_result" + freshVarCount++, sort);
+
+                FPExpr negOne = ctx.mkFPNumeral(-1.0, sort);
+                FPExpr posOne = ctx.mkFPNumeral(1.0, sort);
+
+                solver.add(ctx.mkFPGEq(result, negOne));
+                solver.add(ctx.mkFPLEq(result, posOne));
+
+                z3FunDecSet.add("__sin_result" + (freshVarCount - 1));
+
+                return result;
+            } else {
+                RealExpr result = ctx.mkRealConst("__sin_result" + freshVarCount++);
+
+                solver.add(ctx.mkGe(result, ctx.mkReal("-1")));
+                solver.add(ctx.mkLe(result, ctx.mkReal("1")));
+
+                z3FunDecSet.add("__sin_result" + (freshVarCount - 1));
+
+                return result;
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("## Error Z3: sin(Object) failed.\n" + e);
         }
     }
 
