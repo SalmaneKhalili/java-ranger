@@ -39,8 +39,10 @@ package gov.nasa.jpf.symbc.numeric.solvers;
 
 import java.io.*;
 import java.math.BigInteger;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import com.microsoft.z3.*;
@@ -101,6 +103,21 @@ public class ProblemZ3BitVector extends ProblemGeneral {
     private int bitVectorLength;
     private long minAllowed;
     private long maxAllowed;
+
+    // Pending sin operations for two-phase concretization
+    private final List<PendingSin> pendingSins = new ArrayList<>();
+    private static int sinVarCount = 0;
+
+    private static class PendingSin {
+        final FPExpr resultVar;
+        final Expr argExpr;
+        final int sortBits;
+        PendingSin(FPExpr resultVar, Expr argExpr, int sortBits) {
+            this.resultVar = resultVar;
+            this.argExpr = argExpr;
+            this.sortBits = sortBits;
+        }
+    }
 
     public ProblemZ3BitVector() {
         Z3Wrapper z3 = Z3Wrapper.getInstance();
@@ -173,6 +190,173 @@ public class ProblemZ3BitVector extends ProblemGeneral {
     }
 
     @Override
+    public Object sin(Object exp) {
+        try {
+            FPSort sort = (bitVectorLength == 32) ? ctx.mkFPSort32() : ctx.mkFPSortDouble();
+            String name = "_sin_" + (sinVarCount++);
+            FPExpr result = (FPExpr) ctx.mkConst(name, sort);
+            FPExpr lo = ctx.mkFP(-1.0, sort);
+            FPExpr hi = ctx.mkFP(1.0, sort);
+            solver.add(ctx.mkAnd(ctx.mkFPGEq(result, lo), ctx.mkFPLEq(result, hi)));
+            if (exp instanceof Expr) {
+                pendingSins.add(new PendingSin(result, (Expr) exp, bitVectorLength));
+            }
+            return result;
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("## Error Z3: sin() failed.\n" + e);
+        }
+    }
+
+    private static final int MAX_CEGIS_ATTEMPTS = 15;
+    private static final double[] CEGIS_SAMPLES = {
+        0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0,
+        -0.5, -1.0, -1.5, -2.0, -2.5, -3.0,
+        Math.PI / 6, Math.PI / 4, Math.PI / 3, Math.PI / 2, Math.PI,
+        -Math.PI / 6, -Math.PI / 4, -Math.PI / 3, -Math.PI / 2, -Math.PI
+    };
+
+    private boolean concretizePendingSins() {
+        if (pendingSins.isEmpty()) return true;
+        try {
+            int baseScopes = solver.getNumScopes();
+            for (int attempt = 0; attempt < MAX_CEGIS_ATTEMPTS; attempt++) {
+                if (attempt > 0) {
+                    if (solver.check() != Status.SATISFIABLE) break;
+                }
+                double[] argValues = new double[pendingSins.size()];
+                int idx = 0;
+                for (PendingSin ps : pendingSins) {
+                    Expr evalResult = solver.getModel().eval(ps.argExpr, true);
+                    argValues[idx] = evalArgAsDouble(evalResult, ps.argExpr);
+                    if (SymbolicInstructionFactory.debugMode) {
+                        System.out.println("[CEGIS] attempt=" + attempt + " arg=" + evalResult + " -> " + argValues[idx] + " sin=" + Math.sin(argValues[idx]));
+                    }
+                    idx++;
+                }
+                solver.push();
+                idx = 0;
+                boolean skipConcretize = false;
+                for (PendingSin ps : pendingSins) {
+                    double v = argValues[idx];
+                    if (Double.isNaN(v) || Double.isInfinite(v)) {
+                        skipConcretize = true;
+                        idx++;
+                        continue;
+                    }
+                    double sinValue = Math.sin(v);
+                    FPSort sort = (ps.sortBits == 32) ? ctx.mkFPSort32() : ctx.mkFPSortDouble();
+                    solver.add(ctx.mkFPEq(ps.resultVar, ctx.mkFP(sinValue, sort)));
+                    idx++;
+                }
+                if (!skipConcretize && solver.check() == Status.SATISFIABLE) {
+                    if (SymbolicInstructionFactory.debugMode) {
+                        System.out.println("[CEGIS] attempt=" + attempt + " CONCRETIZED OK");
+                    }
+                    pendingSins.clear();
+                    return true;
+                }
+                if (SymbolicInstructionFactory.debugMode) {
+                    System.out.println("[CEGIS] attempt=" + attempt + (skipConcretize ? " NaN/Inf detected, excluding" : " concretization UNSAT, excluding args"));
+                }
+                solver.pop();
+                idx = 0;
+                for (PendingSin ps : pendingSins) {
+                    double v = argValues[idx];
+                    FPSort sort = (ps.sortBits == 32) ? ctx.mkFPSort32() : ctx.mkFPSortDouble();
+                    if (Double.isNaN(v)) {
+                        solver.add(ctx.mkNot(ctx.mkFPIsNaN((FPExpr) ps.argExpr)));
+                    } else if (Double.isInfinite(v)) {
+                        solver.add(ctx.mkNot(ctx.mkFPIsInfinite((FPExpr) ps.argExpr)));
+                    } else {
+                        solver.add(ctx.mkNot(ctx.mkFPEq((FPExpr) ps.argExpr, ctx.mkFP(v, sort))));
+                    }
+                    idx++;
+                }
+            }
+            if (SymbolicInstructionFactory.debugMode) {
+                System.out.println("[CEGIS] Z3-based CEGIS exhausted, trying sample values");
+            }
+            while (solver.getNumScopes() > baseScopes) solver.pop();
+            if (solver.check() != Status.SATISFIABLE) {
+                pendingSins.clear();
+                return false;
+            }
+            for (double sample : CEGIS_SAMPLES) {
+                solver.push();
+                boolean feasible = true;
+                int idx = 0;
+                for (PendingSin ps : pendingSins) {
+                    FPSort sort = (ps.sortBits == 32) ? ctx.mkFPSort32() : ctx.mkFPSortDouble();
+                    double sinValue = Math.sin(sample);
+                    solver.add(ctx.mkFPEq(ps.resultVar, ctx.mkFP(sinValue, sort)));
+                    if (ps.argExpr instanceof FPExpr) {
+                        solver.add(ctx.mkFPEq((FPExpr) ps.argExpr, ctx.mkFP(sample, sort)));
+                    }
+                    idx++;
+                }
+                if (feasible && solver.check() == Status.SATISFIABLE) {
+                    if (SymbolicInstructionFactory.debugMode) {
+                        System.out.println("[CEGIS] sample " + sample + " CONCRETIZED OK, sin=" + Math.sin(sample));
+                    }
+                    pendingSins.clear();
+                    return true;
+                }
+                solver.pop();
+            }
+            if (SymbolicInstructionFactory.debugMode) {
+                System.out.println("[CEGIS] all samples exhausted, concretization failed");
+            }
+            while (solver.getNumScopes() > baseScopes) solver.pop();
+            pendingSins.clear();
+            return false;
+        } catch (Exception e) {
+            e.printStackTrace();
+            try { while (solver.getNumScopes() > 1) solver.pop(); } catch (Exception ignored) {}
+            pendingSins.clear();
+            return false;
+        }
+    }
+
+    private double evalArgAsDouble(Expr evalResult, Expr original) {
+        if (evalResult instanceof FPNum) {
+            return fpNumToDouble((FPNum) evalResult);
+        }
+        if (evalResult instanceof RatNum) {
+            try {
+                return Double.parseDouble(((RatNum) evalResult).toDecimalString(15).replace('?', '0'));
+            } catch (Exception ignored) {}
+        }
+        if (original instanceof FPExpr) {
+            try {
+                Model model = solver.getModel();
+                Expr constVal = model.getConstInterp(((FPExpr) original).getFuncDecl());
+                if (constVal instanceof FPNum) {
+                    return fpNumToDouble((FPNum) constVal);
+                }
+            } catch (Exception ignored) {}
+        }
+        return 0.0;
+    }
+
+    private double fpNumToDouble(FPNum num) {
+        try {
+            if (num.isZero()) return num.isNegative() ? -0.0 : 0.0;
+            if (num.isNaN()) return Double.NaN;
+            if (num.isInf()) return num.isNegative() ? Double.NEGATIVE_INFINITY : Double.POSITIVE_INFINITY;
+            boolean sign = num.getSign();
+            long expBiased = num.getExponentInt64(true);
+            long significand = num.getSignificandUInt64();
+            long bits = (sign ? (1L << 63) : 0)
+                | ((expBiased & 0x7FFL) << 52)
+                | (significand & 0x000FFFFFFFFFFFFFL);
+            return Double.longBitsToDouble(bits);
+        } catch (Exception e) {
+            return 0.0;
+        }
+    }
+
+    @Override
     public Boolean solve() {
         try {
         	boolean result = false;
@@ -229,6 +413,9 @@ public class ProblemZ3BitVector extends ProblemGeneral {
                 VeritestingListener.z3Time += (System.nanoTime() - t1);
                 VeritestingListener.solverCount++;
         	}
+            if (result && !pendingSins.isEmpty()) {
+                result = concretizePendingSins();
+            }
             return result;
         } catch (Exception e) {
             e.printStackTrace();
