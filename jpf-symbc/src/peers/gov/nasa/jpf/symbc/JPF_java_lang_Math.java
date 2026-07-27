@@ -301,16 +301,22 @@ public class JPF_java_lang_Math extends NativePeer{
   @MJI
   public static double sin__D__D (MJIEnv env, int clsObjRef, double a) {
 	  Object [] attrs = env.getArgAttributes();
-	  if (attrs==null) // concrete? I think
+	  if (attrs==null)
 		  return Math.sin(a);
 	  RealExpression sym_arg = (RealExpression) attrs[0];
-	  if (sym_arg == null) { // concrete
+	  if (sym_arg == null) {
 		  return Math.sin(a);
 	  }
 	  else {
-		  RealExpression result = new MathRealExpression(MathFunction.SIN,sym_arg);
+		  // 5th-order Taylor polynomial: x - x^3/3! + x^5/5!
+		  RealExpression x3 = new MathRealExpression(MathFunction.POW, sym_arg, 3.0);
+		  RealExpression x5 = new MathRealExpression(MathFunction.POW, sym_arg, 5.0);
+
+		  RealExpression result = sym_arg
+			  ._minus(x3._div(6.0))
+			  ._plus(x5._div(120.0));
+
 		  env.setReturnAttribute(result);
-		  // System.out.println("result "+result);
 		  return 0;
 	  }
 

@@ -820,8 +820,10 @@ public class ProblemZ3BitVector extends ProblemGeneral {
             } else if (exp1 instanceof IntExpr && exp2 instanceof IntExpr) {
                 return ctx.mkMul((IntExpr) exp1, (IntExpr) exp2);
             } else if (exp1 instanceof FPExpr && exp2 instanceof FPExpr) {
-                return ctx.mkFPMul(ctx.mkFPRoundNearestTiesToEven(), (FPExpr) exp1, (FPExpr) exp2);}
-                else{
+                return ctx.mkFPMul(ctx.mkFPRoundNearestTiesToEven(), (FPExpr) exp1, (FPExpr) exp2);
+            } else if (exp1 instanceof RealExpr && exp2 instanceof RealExpr) {
+                return ctx.mkMul((RealExpr) exp1, (RealExpr) exp2);
+            } else {
                 throw new RuntimeException();
             }
         } catch (Exception e) {
@@ -1562,6 +1564,15 @@ public class ProblemZ3BitVector extends ProblemGeneral {
 	}
 
 	public Object power(Object exp1, double exp2) {
+		if (exp1 instanceof FPExpr) {
+			int n = (int) exp2;
+			FPSort sort = ((FPExpr) exp1).getSort();
+			Object result = ctx.mkFPNumeral(1.0, sort);
+			for (int i = 0; i < n; i++) {
+				result = ctx.mkFPMul(ctx.mkFPRoundNearestTiesToEven(), (FPExpr) result, (FPExpr) exp1);
+			}
+			return result;
+		}
 		return ctx.mkPower((ArithExpr)exp1, ctx.mkReal("" + exp2));
 	}
 
