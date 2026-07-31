@@ -92,7 +92,7 @@
 #target=svcomp.assert22.Main
 #target=svcomp.MergeSortIterative_MemSat01.Main
 #target=svcomp.StringValueOf06.Main
-target=svcomp.demo.Demo
+target=svcomp.checkfieldmethod.Main
 
 classpath=${jpf-symbc}/build/examples,${jpf-symbc}/lib/com.ibm.wala.util-1.4.4-SNAPSHOT.jar
 symbolic.dp=z3
