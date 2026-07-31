@@ -41,6 +41,11 @@ public class FDIV extends gov.nasa.jpf.jvm.bytecode.FDIV {
         float v1 = sf.peekFloat(0);
         RealExpression sym_v2 = (RealExpression) sf.getOperandAttr(1);
         float v2 = sf.peekFloat(1);
+
+        // Concrete divisor: IEEE 754 handles 0, NaN and Inf natively in
+        // Java (x/0 = +-Inf, 0/0 = NaN), so defer to the concrete
+        // implementation.  If the dividend is symbolic, attach the
+        // symbolic result expression.
         if (sym_v1 == null) {
             Instruction next_insn = super.execute(th);
             if (sym_v2 != null) // result is symbolic expression
@@ -48,9 +53,8 @@ public class FDIV extends gov.nasa.jpf.jvm.bytecode.FDIV {
             return next_insn;
         }
 
-        // div by zero / NaN / Inf check affects path condition
-        // sym_v1 is non-null and should be checked against zero, NaN, and Inf
-
+        // Symbolic divisor: its IEEE 754 class determines the result.
+        // Explore the four mutually-exclusive cases as a choice.
         ChoiceGenerator<?> cg;
         int choice;
 
@@ -77,8 +81,6 @@ public class FDIV extends gov.nasa.jpf.jvm.bytecode.FDIV {
                 choice = (Integer) cg.getNextChoice();
             }
         }
-
-        super.execute(th); // pops v1, v2 and pushes r = v2 / v1;
 
         PathCondition pc;
         ChoiceGenerator<?> prev_cg = cg.getPreviousChoiceGeneratorOfType(PCChoiceGenerator.class);
@@ -108,30 +110,55 @@ public class FDIV extends gov.nasa.jpf.jvm.bytecode.FDIV {
         // exception, which was incorrect for IEEE 754 and prevented
         // the symbolic engine from exploring paths that produce
         // Infinity/NaN results.
+        //
+        // The result value is part of the choice: each branch computes
+        // the concrete result consistent with that branch's semantics,
+        // considering the dividend's IEEE 754 class as well.
         // ------------------------------------------------------------
+        float resultValue;
         if (choice == 0) { // zero divisor
             pc._addDet(Comparator.EQ, sym_v1, 0);
+            // dividend 0 -> NaN, otherwise +-Inf (sign = sign(v2) ^ sign(v1))
+            if (v2 == 0)
+                resultValue = Float.NaN;
+            else
+                resultValue = (Math.copySign(1.0f, v1) * Math.copySign(1.0f, v2) < 0)
+                        ? Float.NEGATIVE_INFINITY : Float.POSITIVE_INFINITY;
         } else if (choice == 1) { // NaN divisor
             pc._addDet(sym_v1, Comparator.IS_NAN);
+            resultValue = Float.NaN; // x/NaN = NaN
         } else if (choice == 2) { // Inf divisor
             pc._addDet(sym_v1, Comparator.IS_INF);
+            // Inf/Inf = NaN, otherwise +-0 (sign = sign(v2) ^ sign(v1))
+            if (Float.isInfinite(v2))
+                resultValue = Float.NaN;
+            else
+                resultValue = (Math.copySign(1.0f, v1) * Math.copySign(1.0f, v2) < 0)
+                        ? -0.0f : +0.0f;
         } else { // normal divisor (non-zero, non-NaN, non-Inf)
             pc._addDet(Comparator.NE, sym_v1, 0);
             pc._addDet(sym_v1, Comparator.NOT_IS_NAN);
             pc._addDet(sym_v1, Comparator.NOT_IS_INF);
+            // Concrete division handles a special dividend natively
+            // (NaN/x = NaN, Inf/x = +-Inf, 0/x = +-0).
+            resultValue = v2 / v1;
         }
 
         if (pc.simplify()) { // satisfiable
             ((PCChoiceGenerator) cg).setCurrentPC(pc);
 
-            // set the result
+            sf = th.getModifiableTopFrame();
+            sf.popFloat();
+            sf.popFloat();
+            sf.pushFloat(resultValue);
+
+            // set the symbolic result
             RealExpression result;
             if (sym_v2 != null)
                 result = sym_v2._div(sym_v1);
             else
                 result = sym_v1._div_reverse(v2);
 
-            sf = th.getModifiableTopFrame();
             sf.setOperandAttr(result);
             return getNext(th);
 
