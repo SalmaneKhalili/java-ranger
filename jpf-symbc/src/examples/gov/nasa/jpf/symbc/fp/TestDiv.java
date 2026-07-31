@@ -4,20 +4,12 @@ public class TestDiv {
 
     public static void main(String[] args) {
         TestDiv t = new TestDiv();
-        //t.testFDivChain(5.0f, 6.0f);
         t.testNaN(5.0f);
 
     }
 
     public void testNaN(float x){
-        // assert x != x; // would fire if NaN comparisons work (x!=x true for NaN)
-        //float res = x / 0.0f;
-       // System.out.println(res);
         assert x != x; // fires because NaN != NaN, so x==x is false for NaN
-
-        // Expected: fires only when symbolic.nan=true (NaN values in domain)
-        // FCMP 4th branch controls choice encoding, not whether NaN exists
-        // assert x == x || x != x;  // law of excluded middle, should never fire
     }
 
     public void test(float x, float y) {
@@ -36,26 +28,9 @@ public class TestDiv {
         }
     }
 
-
-
     public void testFDivChain(float x, float y) {
         float q = x / y;
-
         // Chain 1: 0/0 = NaN
         assert !(x == 0.0f && y == 0.0f && q == q);
-
-
-        // Chain 2: 0/0 produces q != q (NaN)
-       // assert !(x == 0.0f && y == 0.0f && !(q != q));
-
-
-        // Chain 3: positive/0 = +inf
-        //assert !(x > 0.0f && y == 0.0f && q != Float.POSITIVE_INFINITY);
-
-
-        // Chain 4: negative/0 = -inf
-        //assert !(x < 0.0f && y == 0.0f && q != Float.NEGATIVE_INFINITY);
-
-
     }
 }
