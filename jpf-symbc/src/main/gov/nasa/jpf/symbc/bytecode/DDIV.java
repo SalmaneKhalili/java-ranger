@@ -56,7 +56,6 @@ public class DDIV extends gov.nasa.jpf.jvm.bytecode.DDIV {
 
     @Override
     public Instruction execute(ThreadInfo th) {
-
         StackFrame sf = th.getModifiableTopFrame();
 
         RealExpression sym_v1 = (RealExpression) sf.getOperandAttr(1);
