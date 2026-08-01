@@ -53,7 +53,7 @@ public enum Comparator {
    IS_INF(" IS_INF ") { public Comparator not() { return NOT_IS_INF; }},
    NOT_IS_INF(" NOT_IS_INF ") { public Comparator not() { return IS_INF; }};
 
-	private final String str;
+   private final String str;
 
    Comparator(String str){
 	   this.str= str;
@@ -107,7 +107,7 @@ public enum Comparator {
 				return !Double.isInfinite(x);
 			default:
 				assert false : "Not expecting to evaluate a binary comparator with one argument";
-				return false;
+			return false;
 		}
 	}
 }

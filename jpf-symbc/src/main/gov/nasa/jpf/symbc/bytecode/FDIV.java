@@ -26,6 +26,7 @@ import gov.nasa.jpf.vm.ChoiceGenerator;
 import gov.nasa.jpf.vm.Instruction;
 import gov.nasa.jpf.vm.StackFrame;
 import gov.nasa.jpf.vm.ThreadInfo;
+import gov.nasa.jpf.vm.Types;
 
 /**
  * YN: fixed choice selection in symcrete support (Yannic Noller <nolleryc@gmail.com>)
@@ -166,6 +167,7 @@ public class FDIV extends gov.nasa.jpf.jvm.bytecode.FDIV {
             th.getVM().getSystemState().setIgnored(true);
             return getNext(th);
         }
+
     }
 
 }

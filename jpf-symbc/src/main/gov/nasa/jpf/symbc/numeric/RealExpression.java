@@ -96,7 +96,7 @@ public abstract class RealExpression extends Expression {
 	{
 		return new BinaryRealExpression(this, DIV, e);
 	}
-
+	
 	public RealExpression _neg () 
 	{
 		return new BinaryRealExpression(new RealConstant(0), MINUS, this);

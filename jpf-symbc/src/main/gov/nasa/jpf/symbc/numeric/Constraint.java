@@ -128,7 +128,7 @@ public abstract class Constraint implements Comparable<Constraint> {
 		  return false;
 	  }
 
-	  if (!(o instanceof Constraint)) {
+    if (!(o instanceof Constraint)) {
       return false;
     }
 
@@ -176,7 +176,7 @@ public abstract class Constraint implements Comparable<Constraint> {
 				else if (c.getRight() == null)
 					r = 1;
 				else
-					r = right.compareTo(c.getRight());
+				r = right.compareTo(c.getRight());
 			}
 		}
 		return r;

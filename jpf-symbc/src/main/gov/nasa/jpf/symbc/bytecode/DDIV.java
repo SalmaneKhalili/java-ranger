@@ -165,8 +165,8 @@ public class DDIV extends gov.nasa.jpf.jvm.bytecode.DDIV {
             resultValue = v2 / v1;
         }
 
-        if (pc.simplify()) { // satisfiable
-            ((PCChoiceGenerator) cg).setCurrentPC(pc);
+            if (pc.simplify()) { // satisfiable
+                ((PCChoiceGenerator) cg).setCurrentPC(pc);
 
             sf = th.getModifiableTopFrame();
             sf.popDouble();
@@ -174,19 +174,19 @@ public class DDIV extends gov.nasa.jpf.jvm.bytecode.DDIV {
             sf.pushDouble(resultValue);
 
             // set the symbolic result
-            RealExpression result;
-            if (sym_v2 != null)
-                result = sym_v2._div(sym_v1);
-            else
-                result = sym_v1._div_reverse(v2);
+                RealExpression result;
+                if (sym_v2 != null)
+                    result = sym_v2._div(sym_v1);
+                else
+                    result = sym_v1._div_reverse(v2);
 
-            sf.setLongOperandAttr(result);
-            return getNext(th);
+                sf.setLongOperandAttr(result);
+                return getNext(th);
 
-        } else {
-            th.getVM().getSystemState().setIgnored(true);
-            return getNext(th);
-        }
+            } else {
+                th.getVM().getSystemState().setIgnored(true);
+                return getNext(th);
+            }
 
     }
 
