@@ -12,5 +12,4 @@ search.depth_limit=20
 symbolic.lazy=on 
 symbolic.jrarrays=true 
 listener = .symbc.SymbolicListener
-vm.storage.class=nil
-symbolic.optimizechoices=true
+symbolic.optimizechoices=false
