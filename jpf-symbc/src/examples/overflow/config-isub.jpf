@@ -1,4 +1,4 @@
-target=overflow.ISUBOverflow_true.MainProp1
+target=overflow.SubtractionOverflowTest
 
 classpath=${jpf-symbc}/build/examples
 
