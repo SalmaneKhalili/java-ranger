@@ -1,22 +1,27 @@
 package gov.nasa.jpf.symbc.fp;
 
+import org.sosy_lab.sv_benchmarks.Verifier;
+
 public class TestFDivInf {
 
     public static void main(String[] args) {
         TestFDivInf t = new TestFDivInf();
-        t.testFDivInf(5.0f, 6.0f);
+        // Symcrete pattern: exercise both operand orders.
+        t.testFDivInf(5.0f, Verifier.nondetFloat());
+        t.testFDivInf(Verifier.nondetFloat(), 6.0f);
     }
 
+    // FDIV Infinity semantics: with symbolic.inf=true the divisor can be
+    // infinite, and x/Inf is +-0 (Inf/Inf is NaN, but the dividend here is
+    // finite).  The Inf-divisor case is choice 2 of the FDIV choice
+    // generator.
     public void testFDivInf(float x, float y) {
-        float z = x / y;
-        // FDIV with both symbolic operands
-        // y (divisor) can be zero, NaN, Inf, or normal
-        // Simple check: NaN is the only case where z != z
-        if (z == z) {
-            System.out.println("Not NaN");
+        float res = x / y;
+        if (y == Float.POSITIVE_INFINITY) {
+            System.out.println("+Inf divisor -> zero");
+            assert res == 0.0f;
         } else {
-            System.out.println("NaN path");
-            assert false;
+            System.out.println("non-+Inf divisor");
         }
     }
 }
