@@ -6,29 +6,47 @@ public class TestDDiv {
 
     public static void main(String[] args) {
         TestDDiv t = new TestDDiv();
-        // Symcrete pattern: exercise both operand orders.
-        // 1) concrete dividend, symbolic divisor -> DDIV 4-branch choice generator
-        t.test(5.0, Verifier.nondetDouble());
-        // 2) symbolic dividend, concrete divisor -> concrete IEEE-754 division
-        t.test(Verifier.nondetDouble(), 6.0);
+
+        // 1. Regular Symcrete Matrix (Concrete / Symbolic combinations)
+        t.test(5.0, 6.0);                             // Concrete - Concrete
+        t.test(5.0, Verifier.nondetDouble());         // Concrete - Symbolic
+        t.test(Verifier.nondetDouble(), 6.0);         // Symbolic - Concrete
+        t.test(Verifier.nondetDouble(), Verifier.nondetDouble()); // Symbolic - Symbolic
+
+        // 2. IEEE 754 Edge Case Injections
+        t.test(Double.NaN, Verifier.nondetDouble());              // NaN dividend
+        t.test(Verifier.nondetDouble(), Double.POSITIVE_INFINITY); // +Inf divisor
+        t.test(Double.NEGATIVE_INFINITY, Verifier.nondetDouble()); // -Inf dividend
+        t.test(Verifier.nondetDouble(), 0.0);                   // Zero divisor
+        t.test(-0.0, Verifier.nondetDouble());                  // Negative zero dividend
+
+        // 3. NaN Unordered Comparison Check (DCMP Instruction)
+        t.testNaN(Double.NaN);
+        t.testNaN(Verifier.nondetDouble());
     }
 
-    // DDIV with a symbolic operand: classify the divisor the way the DDIV
-    // choice generator does and check the IEEE-754 result invariant.
-    //   y == 0   -> x/0  = +-Inf (no ArithmeticException, unlike integer div)
-    //   y is NaN -> x/NaN = NaN
-    //   else     -> x/y is finite (divisor is a normal value in range)
+    // DDIV with symbolic operands: branches on result classification
     public void test(double x, double y) {
         double res = x / y;
-        if (y == 0.0) {
-            System.out.println("zero divisor -> inf");
-            assert Double.isInfinite(res);
-        } else if (y != y) {
-            System.out.println("NaN divisor -> NaN");
-            assert Double.isNaN(res);
+        if (res == Double.POSITIVE_INFINITY) {
+            System.out.println("+inf");
+        } else if (res == Double.NEGATIVE_INFINITY) {
+            System.out.println("-inf");
+        } else if (res == 0.0) {
+            System.out.println("zero");
+        } else if (res != res) {
+            System.out.println("nan");
         } else {
-            System.out.println("normal divisor -> finite");
-            assert res == res;
+            System.out.println("normal: " + res);
+        }
+    }
+
+    // Exercises DCMP semantics for NaN unordered comparison
+    public void testNaN(double x) {
+        if (x != x) {
+            System.out.println("x is NaN");
+        } else {
+            System.out.println("x is not NaN");
         }
     }
 }
