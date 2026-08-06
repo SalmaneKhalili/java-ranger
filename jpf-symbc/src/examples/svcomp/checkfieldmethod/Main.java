@@ -9,30 +9,33 @@ import org.sosy_lab.sv_benchmarks.Verifier;
 
 class Main {
 
-  Ref helper = new Ref();
-
   public static void main(String[] args) {
     new Main().start();
   }
 
   private void start() {
     int i = Verifier.nondetInt();
-    helper.self = helper;
-    helper.x = i;
+    Ref ref = new Ref(i);
+    int xCopy = ref.x;
     if (i < 0) {
-      Ref refSelf = helper.self;
-      refSelf.x += 2;
-      helper.incrementX();
+      ref.self.x += 2;
+      ref.incrementX_byThree();
+      xCopy = ref.x;
     }
-    assert i < 0 ? helper.self.x == i + 5 : false;
+    assert i < 0 ? xCopy == i + 5 : true;
   }
 
   class Ref {
 
     public Ref self;
-    int x = 0; //Verifier.nondetInt();
+    int x = 0;
 
-    void incrementX() {
+    public Ref(int x) {
+      this.x = x;
+      this.self = this;
+    }
+
+    void incrementX_byThree() {
       x += 3;
     }
   }
