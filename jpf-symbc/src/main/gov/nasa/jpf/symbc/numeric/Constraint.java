@@ -131,7 +131,7 @@ public abstract class Constraint implements Comparable<Constraint> {
 
     return left.equals(((Constraint) o).left)
         && comp.equals(((Constraint) o).comp)
-        && right.equals(((Constraint) o).right);
+        && (right == null ? ((Constraint) o).right == null : right.equals(((Constraint) o).right));
   }
 
   public int hashCode() {
