@@ -22,11 +22,13 @@ import gov.nasa.jpf.symbc.numeric.Comparator;
 import gov.nasa.jpf.symbc.numeric.PCChoiceGenerator;
 import gov.nasa.jpf.symbc.numeric.PathCondition;
 import gov.nasa.jpf.symbc.numeric.RealExpression;
-import gov.nasa.jpf.vm.*;
-
+import gov.nasa.jpf.vm.ChoiceGenerator;
+import gov.nasa.jpf.vm.Instruction;
+import gov.nasa.jpf.vm.StackFrame;
+import gov.nasa.jpf.vm.ThreadInfo;
 
 /**
- * Remainder float
+ * Symbolic float remainder (IEEE 754).
  * ..., value1, value2 => ..., result
  */
 public class FREM extends gov.nasa.jpf.jvm.bytecode.FREM  {
@@ -43,32 +45,39 @@ public class FREM extends gov.nasa.jpf.jvm.bytecode.FREM  {
 
       if (sym_v1 == null) {
           Instruction next_insn = super.execute(th);
-          if (sym_v2 != null) // result is symbolic expression
+            if (sym_v2 != null)
               sf.setOperandAttr(sym_v2._rem(v1));
           return next_insn;
       }
 
       ChoiceGenerator<?> cg;
-      boolean condition;
+        int choice;
 
-      if (!th.isFirstStepInsn()) { // first time around
-          cg = new PCChoiceGenerator(SymbolicInstructionFactory.collect_constraints ? 1 : 2);
+        if (!th.isFirstStepInsn()) {
+            cg = new PCChoiceGenerator(SymbolicInstructionFactory.collect_constraints ? 1 : 4);
           ((PCChoiceGenerator) cg).setOffset(this.position);
           ((PCChoiceGenerator) cg).setMethodName(this.getMethodInfo().getFullName());
           th.getVM().getSystemState().setNextChoiceGenerator(cg);
           return this;
-      } else { // this is what really returns results
+        } else {
           cg = th.getVM().getSystemState().getChoiceGenerator();
           assert (cg instanceof PCChoiceGenerator) : "expected PCChoiceGenerator, got: " + cg;
           if (SymbolicInstructionFactory.collect_constraints) {
-              condition = v1 == 0; // i.e. false
-              ((PCChoiceGenerator) cg).select(condition ? 1 : 0); // YN: set the choice correctly
+                if (v1 == 0)
+                    choice = 0;
+                else if (Float.isNaN(v1))
+                    choice = 1;
+                else if (Float.isInfinite(v1))
+                    choice = 2;
+                else
+                    choice = 3;
+                ((PCChoiceGenerator) cg).select(choice);
           } else {
-              condition = (Integer) cg.getNextChoice() != 0;
+                choice = (Integer) cg.getNextChoice();
           }
       }
 
-      super.execute(th); // pops v1, v2 and pushes r = v2 / v1;
+        super.execute(th);
 
       PathCondition pc;
       ChoiceGenerator<?> prev_cg = cg.getPreviousChoiceGeneratorOfType(PCChoiceGenerator.class);
@@ -80,13 +89,30 @@ public class FREM extends gov.nasa.jpf.jvm.bytecode.FREM  {
 
       assert pc != null;
 
-      Comparator comparator = (condition) ? Comparator.EQ: Comparator.NE;
+        // ------------------------------------------------------------
+        // 4-branch choice generator for FREM (IEEE 754 semantics).
+        //
+        // Java's float remainder (x % y) follows IEEE 754:
+        //   choice 0:  divisor == 0       → result is NaN
+        //   choice 1:  divisor is NaN     → result is NaN
+        //   choice 2:  divisor is Inf     → result is x (if x finite)
+        //   choice 3:  normal divisor     → IEEE 754 remainder
+        // ------------------------------------------------------------
+        if (choice == 0) {
+            pc._addDet(Comparator.EQ, sym_v1, 0);
+        } else if (choice == 1) {
+            pc._addDet(sym_v1, Comparator.IS_NAN);
+        } else if (choice == 2) {
+            pc._addDet(sym_v1, Comparator.IS_INF);
+        } else {
+            pc._addDet(Comparator.NE, sym_v1, 0);
+            pc._addDet(sym_v1, Comparator.NOT_IS_NAN);
+            pc._addDet(sym_v1, Comparator.NOT_IS_INF);
+        }
 
-      pc._addDet(comparator, sym_v1, 0);
-      if (pc.simplify()) { // satisfiable
+        if (pc.simplify()) {
           ((PCChoiceGenerator) cg).setCurrentPC(pc);
 
-          // set the result
           RealExpression result;
           if (sym_v2 != null)
               result = sym_v2._rem(sym_v1);
@@ -101,18 +127,6 @@ public class FREM extends gov.nasa.jpf.jvm.bytecode.FREM  {
           th.getVM().getSystemState().setIgnored(true);
           return getNext(th);
       }
-//
-//    if(sym_v1==null && sym_v2==null){
-//        if (v1 == 0){
-//            return th.createAndThrowException("java.lang.ArithmeticException","division by zero");
-//        }
-//        sf.push(Types.floatToInt(v2 % v1), false);
-//    }else {
-//    	sf.push(0, false);
-//    	throw new RuntimeException("## Error: SYMBOLIC FREM not supported");
-//    }
-	
-//    return getNext(th);
   }
 
 }
