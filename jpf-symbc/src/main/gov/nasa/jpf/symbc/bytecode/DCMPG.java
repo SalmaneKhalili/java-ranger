@@ -40,7 +40,7 @@ public class DCMPG extends gov.nasa.jpf.jvm.bytecode.DCMPG {
         RealExpression sym_v1 = (RealExpression) sf.getOperandAttr(1);
         RealExpression sym_v2 = (RealExpression) sf.getOperandAttr(3);
 
-        if (sym_v1 == null && sym_v2 == null) {
+        if (sym_v1 == null && sym_v2 == null) { // both conditions are concrete
             return super.execute(th);
         }
 
@@ -76,6 +76,11 @@ public class DCMPG extends gov.nasa.jpf.jvm.bytecode.DCMPG {
         }
 
         PathCondition pc;
+        
+        // pc is updated with the pc stored in the choice generator above
+        // get the path condition from the
+        // previous choice generator of the same type
+        
         ChoiceGenerator<?> prev_cg = cg.getPreviousChoiceGeneratorOfType(PCChoiceGenerator.class);
 
         if (prev_cg == null)
