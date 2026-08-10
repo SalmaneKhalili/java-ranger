@@ -118,19 +118,4 @@ public enum Comparator {
 			return false;
 		}
 	}
-	public boolean evaluate(double x){
-		switch (this){
-			case IS_NAN:
-				return Double.isNaN(x);
-			case NOT_IS_NAN:
-				return !Double.isNaN(x);
-			case IS_INF:
-				return Double.isInfinite(x);
-			case NOT_IS_INF:
-				return !Double.isInfinite(x);
-			default:
-				assert false : "Not expecting to evaluate a binary comparator with one argument";
-				return false;
-		}
-	}
 }
