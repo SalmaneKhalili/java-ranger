@@ -95,6 +95,14 @@ public enum Comparator {
 			return false;
 		}
 	}
+	/**
+	 * Apply this unary comparator (IS_NAN, IS_INF, ...) to a single operand.
+	 *
+	 * @param x
+	 *            the operand to test
+	 * @return <code>true</code> if and only if the operand satisfies this
+	 *         comparator
+	 */
 	public boolean evaluate(double x){
 		switch (this){
 			case IS_NAN:
