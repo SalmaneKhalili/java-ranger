@@ -31,38 +31,38 @@ import gov.nasa.jpf.vm.ThreadInfo;
  * Symbolic float remainder (IEEE 754).
  * ..., value1, value2 => ..., result
  */
-public class FREM extends gov.nasa.jpf.jvm.bytecode.FREM  {
+public class FREM extends gov.nasa.jpf.jvm.bytecode.FREM {
 
-  @Override
-  public Instruction execute (ThreadInfo th) {
+    @Override
+    public Instruction execute(ThreadInfo th) {
 
-    StackFrame sf = th.getModifiableTopFrame();
+        StackFrame sf = th.getModifiableTopFrame();
 
-      RealExpression sym_v1 = (RealExpression) sf.getOperandAttr(0);
-      float v1 = sf.peekFloat(0);
-      RealExpression sym_v2 = (RealExpression) sf.getOperandAttr(1);
-      float v2 = sf.peekFloat(1);
+        RealExpression sym_v1 = (RealExpression) sf.getOperandAttr(0);
+        float v1 = sf.peekFloat(0);
+        RealExpression sym_v2 = (RealExpression) sf.getOperandAttr(1);
+        float v2 = sf.peekFloat(1);
 
-      if (sym_v1 == null) {
-          Instruction next_insn = super.execute(th);
+        if (sym_v1 == null) {
+            Instruction next_insn = super.execute(th);
             if (sym_v2 != null)
-              sf.setOperandAttr(sym_v2._rem(v1));
-          return next_insn;
-      }
+                sf.setOperandAttr(sym_v2._rem(v1));
+            return next_insn;
+        }
 
-      ChoiceGenerator<?> cg;
+        ChoiceGenerator<?> cg;
         int choice;
 
         if (!th.isFirstStepInsn()) {
             cg = new PCChoiceGenerator(SymbolicInstructionFactory.collect_constraints ? 1 : 4);
-          ((PCChoiceGenerator) cg).setOffset(this.position);
-          ((PCChoiceGenerator) cg).setMethodName(this.getMethodInfo().getFullName());
-          th.getVM().getSystemState().setNextChoiceGenerator(cg);
-          return this;
+            ((PCChoiceGenerator) cg).setOffset(this.position);
+            ((PCChoiceGenerator) cg).setMethodName(this.getMethodInfo().getFullName());
+            th.getVM().getSystemState().setNextChoiceGenerator(cg);
+            return this;
         } else {
-          cg = th.getVM().getSystemState().getChoiceGenerator();
-          assert (cg instanceof PCChoiceGenerator) : "expected PCChoiceGenerator, got: " + cg;
-          if (SymbolicInstructionFactory.collect_constraints) {
+            cg = th.getVM().getSystemState().getChoiceGenerator();
+            assert (cg instanceof PCChoiceGenerator) : "expected PCChoiceGenerator, got: " + cg;
+            if (SymbolicInstructionFactory.collect_constraints) {
                 if (v1 == 0)
                     choice = 0;
                 else if (Float.isNaN(v1))
@@ -72,22 +72,22 @@ public class FREM extends gov.nasa.jpf.jvm.bytecode.FREM  {
                 else
                     choice = 3;
                 ((PCChoiceGenerator) cg).select(choice);
-          } else {
+            } else {
                 choice = (Integer) cg.getNextChoice();
-          }
-      }
+            }
+        }
 
         super.execute(th);
 
-      PathCondition pc;
-      ChoiceGenerator<?> prev_cg = cg.getPreviousChoiceGeneratorOfType(PCChoiceGenerator.class);
+        PathCondition pc;
+        ChoiceGenerator<?> prev_cg = cg.getPreviousChoiceGeneratorOfType(PCChoiceGenerator.class);
 
-      if (prev_cg == null)
-          pc = new PathCondition();
-      else
-          pc = ((PCChoiceGenerator) prev_cg).getCurrentPC();
+        if (prev_cg == null)
+            pc = new PathCondition();
+        else
+            pc = ((PCChoiceGenerator) prev_cg).getCurrentPC();
 
-      assert pc != null;
+        assert pc != null;
 
         // ------------------------------------------------------------
         // 4-branch choice generator for FREM (IEEE 754 semantics).
@@ -111,22 +111,22 @@ public class FREM extends gov.nasa.jpf.jvm.bytecode.FREM  {
         }
 
         if (pc.simplify()) {
-          ((PCChoiceGenerator) cg).setCurrentPC(pc);
+            ((PCChoiceGenerator) cg).setCurrentPC(pc);
 
-          RealExpression result;
-          if (sym_v2 != null)
-              result = sym_v2._rem(sym_v1);
-          else
-              result = sym_v1._rem_reverse(v2);
+            RealExpression result;
+            if (sym_v2 != null)
+                result = sym_v2._rem(sym_v1);
+            else
+                result = sym_v1._rem_reverse(v2);
 
-          sf = th.getModifiableTopFrame();
-          sf.setOperandAttr(result);
-          return getNext(th);
+            sf = th.getModifiableTopFrame();
+            sf.setOperandAttr(result);
+            return getNext(th);
 
-      } else {
-          th.getVM().getSystemState().setIgnored(true);
-          return getNext(th);
-      }
-  }
+        } else {
+            th.getVM().getSystemState().setIgnored(true);
+            return getNext(th);
+        }
+    }
 
 }

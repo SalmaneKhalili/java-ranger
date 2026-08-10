@@ -124,10 +124,12 @@ public abstract class Constraint implements Comparable<Constraint> {
   }
 
   public boolean equals(Object o) {
-    if (o == null){
-      return false;
-    }
-    if (!(o instanceof Constraint)) {
+
+	  if (o == null){
+		  return false;
+	  }
+
+	  if (!(o instanceof Constraint)) {
       return false;
     }
 
