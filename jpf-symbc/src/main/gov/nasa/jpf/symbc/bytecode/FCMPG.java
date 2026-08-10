@@ -52,34 +52,17 @@ public class FCMPG extends gov.nasa.jpf.jvm.bytecode.FCMPG {
 
         if (!th.isFirstStepInsn()) {
             cg = new PCChoiceGenerator(SymbolicInstructionFactory.collect_constraints ? 1 : 4);
-                ((PCChoiceGenerator) cg).setOffset(this.position);
-                ((PCChoiceGenerator) cg).setMethodName(this.getMethodInfo().getFullName());
-                th.getVM().getSystemState().setNextChoiceGenerator(cg);
-                return this;
-            }
+            ((PCChoiceGenerator) cg).setOffset(this.position);
+            ((PCChoiceGenerator) cg).setMethodName(this.getMethodInfo().getFullName());
+            th.getVM().getSystemState().setNextChoiceGenerator(cg);
+            return this;
+        }
 
-            float v1 = Types.intToFloat(sf.pop());
-            float v2 = Types.intToFloat(sf.pop());
+        float v1 = Types.intToFloat(sf.pop());
+        float v2 = Types.intToFloat(sf.pop());
 
         cg = th.getVM().getSystemState().getChoiceGenerator();
         assert (cg instanceof PCChoiceGenerator) : "expected PCChoiceGenerator, got: " + cg;
-
-            if (SymbolicInstructionFactory.collect_constraints) {
-            if (Float.isNaN(v1) || Float.isNaN(v2))
-                choice = 0;
-            else if (v2 < v1)
-                choice = 1;
-            else if (v2 == v1)
-                choice = 2;
-            else
-                choice = 3;
-            ((PCChoiceGenerator) cg).select(choice);
-            } else {
-            choice = (Integer) cg.getNextChoice();
-            }
-
-            PathCondition pc;
-            ChoiceGenerator<?> prev_cg = cg.getPreviousChoiceGeneratorOfType(PCChoiceGenerator.class);
 
         if (SymbolicInstructionFactory.collect_constraints) {
             if (Float.isNaN(v1) || Float.isNaN(v2))
@@ -89,9 +72,21 @@ public class FCMPG extends gov.nasa.jpf.jvm.bytecode.FCMPG {
             else if (v2 == v1)
                 choice = 2;
             else
-                pc = ((PCChoiceGenerator) prev_cg).getCurrentPC();
+                choice = 3;
+            ((PCChoiceGenerator) cg).select(choice);
+        } else {
+            choice = (Integer) cg.getNextChoice();
+        }
 
-            assert pc != null;
+        PathCondition pc;
+        ChoiceGenerator<?> prev_cg = cg.getPreviousChoiceGeneratorOfType(PCChoiceGenerator.class);
+
+        if (prev_cg == null)
+            pc = new PathCondition();
+        else
+            pc = ((PCChoiceGenerator) prev_cg).getCurrentPC();
+
+        assert pc != null;
 
         if (choice == 0) { // at least one operand is NaN
             if (sym_v1 != null)
@@ -99,10 +94,10 @@ public class FCMPG extends gov.nasa.jpf.jvm.bytecode.FCMPG {
             if (sym_v2 != null)
                 pc._addDet(sym_v2, Comparator.IS_NAN);
             if (!pc.simplify()) {
-                    th.getVM().getSystemState().setIgnored(true);
-                } else {
-                    ((PCChoiceGenerator) cg).setCurrentPC(pc);
-                }
+                th.getVM().getSystemState().setIgnored(true);
+            } else {
+                ((PCChoiceGenerator) cg).setCurrentPC(pc);
+            }
             sf.push(1, false);
         } else {
             // Non-NaN branches: constrain both operands to be non-NaN
@@ -117,7 +112,7 @@ public class FCMPG extends gov.nasa.jpf.jvm.bytecode.FCMPG {
                         pc._addDet(Comparator.LT, sym_v2, sym_v1);
                     else
                         pc._addDet(Comparator.LT, v2, sym_v1);
-                    } else
+                } else
                     pc._addDet(Comparator.LT, sym_v2, v1);
                 if (!pc.simplify()) {
                     th.getVM().getSystemState().setIgnored(true);
@@ -131,7 +126,7 @@ public class FCMPG extends gov.nasa.jpf.jvm.bytecode.FCMPG {
                         pc._addDet(Comparator.EQ, sym_v1, sym_v2);
                     else
                         pc._addDet(Comparator.EQ, sym_v1, v2);
-                    } else
+                } else
                     pc._addDet(Comparator.EQ, v1, sym_v2);
                 if (!pc.simplify()) {
                     th.getVM().getSystemState().setIgnored(true);
@@ -154,10 +149,8 @@ public class FCMPG extends gov.nasa.jpf.jvm.bytecode.FCMPG {
                 }
                 sf.push(1, false);
             }
-            }
-
-            return getNext(th);
         }
 
         return getNext(th);
     }
+}

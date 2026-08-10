@@ -48,19 +48,19 @@ public class DCMPL extends gov.nasa.jpf.jvm.bytecode.DCMPL {
 
         if (!th.isFirstStepInsn()) {
             cg = new PCChoiceGenerator(SymbolicInstructionFactory.collect_constraints ? 1 : 4);
-                ((PCChoiceGenerator) cg).setOffset(this.position);
-                ((PCChoiceGenerator) cg).setMethodName(this.getMethodInfo().getFullName());
-                th.getVM().getSystemState().setNextChoiceGenerator(cg);
-                return this;
-            }
+            ((PCChoiceGenerator) cg).setOffset(this.position);
+            ((PCChoiceGenerator) cg).setMethodName(this.getMethodInfo().getFullName());
+            th.getVM().getSystemState().setNextChoiceGenerator(cg);
+            return this;
+        }
 
-            double v1 = sf.popDouble();
-            double v2 = sf.popDouble();
+        double v1 = sf.popDouble();
+        double v2 = sf.popDouble();
 
         cg = th.getVM().getSystemState().getChoiceGenerator();
         assert (cg instanceof PCChoiceGenerator) : "expected PCChoiceGenerator, got: " + cg;
 
-            if (SymbolicInstructionFactory.collect_constraints) {
+        if (SymbolicInstructionFactory.collect_constraints) {
             if (Double.isNaN(v1) || Double.isNaN(v2))
                 choice = 0;
             else if (v2 < v1)
@@ -70,31 +70,19 @@ public class DCMPL extends gov.nasa.jpf.jvm.bytecode.DCMPL {
             else
                 choice = 3;
             ((PCChoiceGenerator) cg).select(choice);
-            } else {
+        } else {
             choice = (Integer) cg.getNextChoice();
-            }
+        }
 
-            PathCondition pc;
-            ChoiceGenerator<?> prev_cg = cg.getPreviousChoiceGeneratorOfType(PCChoiceGenerator.class);
+        PathCondition pc;
+        ChoiceGenerator<?> prev_cg = cg.getPreviousChoiceGeneratorOfType(PCChoiceGenerator.class);
+
+        if (prev_cg == null)
+            pc = new PathCondition();
+        else
+            pc = ((PCChoiceGenerator) prev_cg).getCurrentPC();
 
         assert pc != null;
-
-        if (choice == 0) { // at least one operand is NaN
-            if (sym_v1 != null)
-                pc._addDet(sym_v1, Comparator.IS_NAN);
-            if (sym_v2 != null)
-                pc._addDet(sym_v2, Comparator.IS_NAN);
-            if (!pc.simplify()) {
-                th.getVM().getSystemState().setIgnored(true);
-            } else {
-                ((PCChoiceGenerator) cg).setCurrentPC(pc);
-            }
-            sf.push(-1, false);
-        } else {
-            if (sym_v1 != null)
-                pc._addDet(sym_v1, Comparator.NOT_IS_NAN);
-            if (sym_v2 != null)
-                pc._addDet(sym_v2, Comparator.NOT_IS_NAN);
 
         if (choice == 0) { // at least one operand is NaN
             if (sym_v1 != null)
