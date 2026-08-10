@@ -81,8 +81,13 @@ public class FCMPG extends gov.nasa.jpf.jvm.bytecode.FCMPG {
             PathCondition pc;
             ChoiceGenerator<?> prev_cg = cg.getPreviousChoiceGeneratorOfType(PCChoiceGenerator.class);
 
-            if (prev_cg == null)
-                pc = new PathCondition();
+        if (SymbolicInstructionFactory.collect_constraints) {
+            if (Float.isNaN(v1) || Float.isNaN(v2))
+                choice = 0;
+            else if (v2 < v1)
+                choice = 1;
+            else if (v2 == v1)
+                choice = 2;
             else
                 pc = ((PCChoiceGenerator) prev_cg).getCurrentPC();
 
@@ -153,4 +158,6 @@ public class FCMPG extends gov.nasa.jpf.jvm.bytecode.FCMPG {
 
             return getNext(th);
         }
+
+        return getNext(th);
     }

@@ -153,4 +153,6 @@ public class FCMPL extends gov.nasa.jpf.jvm.bytecode.FCMPL {
 
             return getNext(th);
         }
+
+        return getNext(th);
     }

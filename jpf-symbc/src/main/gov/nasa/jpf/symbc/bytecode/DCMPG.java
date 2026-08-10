@@ -78,12 +78,29 @@ public class DCMPG extends gov.nasa.jpf.jvm.bytecode.DCMPG {
             PathCondition pc;
             ChoiceGenerator<?> prev_cg = cg.getPreviousChoiceGeneratorOfType(PCChoiceGenerator.class);
 
-            if (prev_cg == null)
-                pc = new PathCondition();
-            else
-                pc = ((PCChoiceGenerator) prev_cg).getCurrentPC();
+        if (prev_cg == null)
+            pc = new PathCondition();
+        else
+            pc = ((PCChoiceGenerator) prev_cg).getCurrentPC();
 
-            assert pc != null;
+        assert pc != null;
+
+        if (choice == 0) { // at least one operand is NaN
+            if (sym_v1 != null)
+                pc._addDet(sym_v1, Comparator.IS_NAN);
+            if (sym_v2 != null)
+                pc._addDet(sym_v2, Comparator.IS_NAN);
+            if (!pc.simplify()) {
+                th.getVM().getSystemState().setIgnored(true);
+            } else {
+                ((PCChoiceGenerator) cg).setCurrentPC(pc);
+            }
+            sf.push(1, false);
+        } else {
+            if (sym_v1 != null)
+                pc._addDet(sym_v1, Comparator.NOT_IS_NAN);
+            if (sym_v2 != null)
+                pc._addDet(sym_v2, Comparator.NOT_IS_NAN);
 
         if (choice == 0) { // at least one operand is NaN
             if (sym_v1 != null)
