@@ -37,6 +37,7 @@
 
 package gov.nasa.jpf.symbc.numeric;
 
+import gov.nasa.jpf.symbc.numeric.Comparator;
 import java.util.Map;
 
 public abstract class Constraint implements Comparable<Constraint> {
@@ -47,6 +48,7 @@ public abstract class Constraint implements Comparable<Constraint> {
   private final Expression right;
 
   public Constraint and;
+
 
   public Constraint(Expression l, Comparator c, Expression r) {
     left = l;
@@ -122,10 +124,12 @@ public abstract class Constraint implements Comparable<Constraint> {
   }
 
   public boolean equals(Object o) {
-    if (o == null){
-      return false;
-    }
-    if (!(o instanceof Constraint)) {
+
+	  if (o == null){
+		  return false;
+	  }
+
+	  if (!(o instanceof Constraint)) {
       return false;
     }
 
@@ -176,13 +180,12 @@ public abstract class Constraint implements Comparable<Constraint> {
 		}
 		return r;
 	}
-  
+
   public String toString() {
     if (right == null)
       return comp.toString() + "(" + left.toString() + ")"
           + ((and == null) ? "" : " &&\n" + and.toString());
     return left.toString() + comp.toString() + right.toString()
-        //+ ((and == null) ? "" : " && " + and.toString()); -- for specialization
         + ((and == null) ? "" : " &&\n" + and.toString());
   }
 
@@ -193,7 +196,7 @@ public abstract class Constraint implements Comparable<Constraint> {
       }
       return c;
   }
-  
+
 //JacoGeldenhuys
 	public void accept(ConstraintExpressionVisitor visitor) {
 		visitor.preVisit(this);
