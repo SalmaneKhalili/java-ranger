@@ -93,6 +93,7 @@
 #target=svcomp.MergeSortIterative_MemSat01.Main
 #target=svcomp.StringValueOf06.Main
 target=svcomp.checkfieldmethod.Main
+#target=svcomp.checkfieldcomp.Main
 
 classpath=${jpf-symbc}/build/examples,${jpf-symbc}/lib/com.ibm.wala.util-1.4.4-SNAPSHOT.jar
 symbolic.dp=z3
@@ -110,9 +111,9 @@ symbolic.jrarrays=true
 veritestingMode = 3
 recursiveDepth= 10
 singlePathOptimization=true
-#listener = .symbc.VeritestingListener
+listener = .symbc.VeritestingListener
 #search.multiple_errors = true
-listener = .symbc.SymbolicListener
+#listener = .symbc.SymbolicListener
 #,.symbc.SymbolicListener
 
 #symbolic.string_dp_timeout_ms=3000
@@ -124,3 +125,4 @@ symbolic.optimizechoices=true
 symbolic.debug=false
 symbolic.jrarrays=true
 symbolic.fp = true
+symbolic.verboseVeritesting=true

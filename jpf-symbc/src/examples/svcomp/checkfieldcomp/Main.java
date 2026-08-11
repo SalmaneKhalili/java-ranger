@@ -1,7 +1,7 @@
-package svcomp.checkfieldmethod;
+package svcomp.checkfieldcomp;
 
 /**
- * crafted an example to expose problematic field SSA transformation for.
+ * crafted an example to expose problematic field SSA transformation for sequential composition.
  */
 
 import org.sosy_lab.sv_benchmarks.Verifier;
@@ -18,11 +18,10 @@ class Main {
     Ref ref = new Ref(i);
     int xCopy = ref.x;
     if (i < 0) {
-      ref.x += 2;
-      ref.self.incrementX_byThree();
+      ref.self.x += 2;
       xCopy = ref.x;
     }
-    assert i < 0 ? xCopy == i + 5 : true;
+    assert i < 0 ? xCopy == i + 2 : true;
   }
 
   class Ref {
@@ -33,10 +32,6 @@ class Main {
     public Ref(int x) {
       this.x = x;
       this.self = this;
-    }
-
-    void incrementX_byThree() {
-      x += 3;
     }
   }
 }
