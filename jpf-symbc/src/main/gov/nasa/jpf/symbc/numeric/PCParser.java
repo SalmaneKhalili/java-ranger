@@ -313,6 +313,15 @@ public class PCParser {
             return pb.and(((RealConstant)e_rightRef).value,getExpression(e_leftRef));
           else
             return pb.and(getExpression(e_leftRef),getExpression(e_rightRef));
+        case REM:
+          if (e_leftRef instanceof RealConstant && e_rightRef instanceof RealConstant)
+            throw new RuntimeException("## Error: this is not a symbolic expression");
+          else if (e_leftRef instanceof RealConstant)
+            return pb.rem(((RealConstant)e_leftRef).value, getExpression(e_rightRef));
+          else if (e_rightRef instanceof RealConstant)
+            return pb.rem(getExpression(e_leftRef), ((RealConstant)e_rightRef).value);
+          else
+            return pb.rem(getExpression(e_leftRef), getExpression(e_rightRef));
 
         default:
           throw new RuntimeException("## Error: Expression " + eRef);
@@ -410,6 +419,27 @@ public class PCParser {
     Comparator c_compRef = cRef.getComparator();
     RealExpression c_leftRef = (RealExpression)cRef.getLeft();
     RealExpression c_rightRef = (RealExpression)cRef.getRight();
+
+    // Unary comparators (IS_NAN, NOT_IS_NAN, IS_INF, NOT_IS_INF)
+    // have no right operand, so they must be handled before the
+    // binary switch(c_compRef) below (which expects c_rightRef to
+    // be non-null).  Each maps directly to a solver call.
+    if (c_compRef == Comparator.IS_NAN) {
+      pb.post(pb.isNan(getExpression(c_leftRef)));
+      return true;
+    }
+    if (c_compRef == Comparator.NOT_IS_NAN) {
+      pb.post(pb.logical_not(pb.isNan(getExpression(c_leftRef))));
+      return true;
+    }
+    if (c_compRef == Comparator.IS_INF) {
+      pb.post(pb.isInf(getExpression(c_leftRef)));
+      return true;
+    }
+    if (c_compRef == Comparator.NOT_IS_INF) {
+      pb.post(pb.logical_not(pb.isInf(getExpression(c_leftRef))));
+      return true;
+    }
 
     switch(c_compRef){
       case EQ:
