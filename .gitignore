@@ -81,3 +81,6 @@ out/
 
 # JIRA plugin
 atlassian-ide-plugin.xml
+
+# Stray witness outputs
+witness.graphml
