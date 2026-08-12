@@ -1610,16 +1610,26 @@ public class ProblemZ3BitVectorIncremental extends ProblemGeneral implements Inc
     }
 
     @Override
-    public Object makeRealConst(double value) {
-        try {
-            if (useFpForReals) {
-                FPSort sort = this.bitVectorLength == 32 ? ctx.mkFPSort32() : ctx.mkFPSort64();
-                return ctx.mkFPNumeral(value, sort);
-            }
-            return ctx.mkReal("" + value);
-        } catch (Exception e) {
-            e.printStackTrace();
-            throw new RuntimeException("## Error Z3 : Exception caught in Z3 JNI: " + e);
-        }
-    }
-}
+     public Object makeRealConst(double value) {
+         try {
+             if (useFpForReals) {
+                 FPSort sort = this.bitVectorLength == 32 ? ctx.mkFPSort32() : ctx.mkFPSort64();
+                 return ctx.mkFPNumeral(value, sort);
+             }
+             return ctx.mkReal("" + value);
+         } catch (Exception e) {
+             e.printStackTrace();
+             throw new RuntimeException("## Error Z3 : Exception caught in Z3 JNI: " + e);
+         }
+     }
+
+     @Override
+     public Object ite(Object cond, Object thenExpr, Object elseExpr) {
+         try {
+             return ctx.mkITE((BoolExpr) cond, (Expr) thenExpr, (Expr) elseExpr);
+         } catch (Exception e) {
+             e.printStackTrace();
+             throw new RuntimeException("## Error Z3: ite() failed.\n" + e);
+         }
+     }
+ }

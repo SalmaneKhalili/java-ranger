@@ -50,7 +50,8 @@ public enum Operator{
 	SHIFTL("<<"),
 	SHIFTR(">>"),
 	SHIFTUR(">>>"),
-	REM(" % ");
+	REM(" % "),
+	ITEXPR(" ite ");
 	
 	
 	

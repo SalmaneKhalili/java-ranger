@@ -208,6 +208,16 @@ public class ProblemZ3BitVector extends ProblemGeneral {
         }
     }
 
+    @Override
+    public Object ite(Object cond, Object thenExpr, Object elseExpr) {
+        try {
+            return ctx.mkITE((BoolExpr) cond, (Expr) thenExpr, (Expr) elseExpr);
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("## Error Z3: ite() failed.\n" + e);
+        }
+    }
+
     private static final int MAX_CEGIS_ATTEMPTS = 15;
     private static final double[] CEGIS_SAMPLES = {
         0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0,

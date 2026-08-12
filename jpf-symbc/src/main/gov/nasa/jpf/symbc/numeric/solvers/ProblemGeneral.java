@@ -127,6 +127,10 @@ public abstract class ProblemGeneral{
 		throw new RuntimeException("## Error: constant not supported");
 	}
 
+	public Object ite(Object cond, Object thenExpr, Object elseExpr) {
+		throw new RuntimeException("## Error: ite not supported");
+	}
+
 	public Object sin(Object exp) {
 		throw new RuntimeException("## Error: Math.sin not supported");
 	}

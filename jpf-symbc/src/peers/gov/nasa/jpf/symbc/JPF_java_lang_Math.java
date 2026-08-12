@@ -49,6 +49,16 @@ import gov.nasa.jpf.vm.NativePeer;
 // simple functions abs, min, max
 public class JPF_java_lang_Math extends NativePeer{
 
+  /**
+   * Number of sub-intervals used by the piecewise-linear Math.sin approximation
+   * on [-PI/2, PI/2]. Error per segment ~ (width)^2 / 8:
+   *   n = 4  -> ~0.070    (parity with the cubic minimax)
+   *   n = 8  -> ~0.019
+   *   n = 16 -> ~0.0048   (default: keeps TestSinConstrainedTRUE sound, s > 0.99)
+   *   n = 32 -> ~0.0012
+   */
+  static int PIECEWISE_LINEAR_SEGMENTS = 16;
+
   // <2do> those are here to hide their implementation from traces, not to
   // increase performance. If we want to do that, we should probably inline
   // their real implementation here, instead of delegating (just a compromise)
@@ -308,9 +318,32 @@ public class JPF_java_lang_Math extends NativePeer{
 		  return Math.sin(a);
 	  }
 	  else {
-		  RealExpression result = new MathRealExpression(MathFunction.SIN,sym_arg);
+		  // ---- PIECEWISE LINEAR INTERPOLATION on [-PI/2, PI/2] ----
+		  // Split [-PI/2, PI/2] into PIECEWISE_LINEAR_SEGMENTS sub-intervals; on each
+		  // sub-interval [xi, xi+1] the secant line S_i(x) = m_i*x + b_i through the knot
+		  // endpoints (xi, sin(xi)) and (xi+1, sin(xi+1)) approximates sin(x). The whole
+		  // sin() becomes a nested symbolic ITE tree whose leaves are single affine
+		  // expressions (one fp.mul + one fp.add each - minimal circuit depth for the Z3
+		  // bitvector solver). Each comparison is x < xi+1 (Operator.CMP == strict less-than).
+		  final int n = PIECEWISE_LINEAR_SEGMENTS;
+		  final double lo = -Math.PI / 2.0;
+		  final double hi =  Math.PI / 2.0;
+		  final double width = (hi - lo) / n;
+		  RealExpression result = null;
+		  for (int i = n - 1; i >= 0; i--) {
+			  final double xi  = lo + i * width;
+			  final double xi1 = lo + (i + 1) * width;
+			  final double m = (Math.sin(xi1) - Math.sin(xi)) / (xi1 - xi);
+			  final double b = Math.sin(xi) - m * xi;
+			  RealExpression segment = new RealConstant(m)._mul(sym_arg)._plus(new RealConstant(b));
+			  if (result == null) {
+				  result = segment;
+			  } else {
+				  RealExpression cond = new BinaryRealExpression(Operator.CMP, sym_arg, new RealConstant(xi1));
+				  result = new BinaryRealExpression(Operator.ITEXPR, cond, segment, result);
+			  }
+		  }
 		  env.setReturnAttribute(result);
-		  // System.out.println("result "+result);
 		  return 0;
 	  }
 

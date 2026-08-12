@@ -44,12 +44,31 @@ public class BinaryRealExpression extends RealExpression
 	RealExpression left;
 	Operator   op;
 	RealExpression right;
+	// ITE only: holds the "else" branch (left=cond, right=then, extra=else)
+	RealExpression extra;
 
 	public BinaryRealExpression (RealExpression l, Operator o, RealExpression r) 
 	{
 		left = l;
 		op = o;
 		right = r;
+	}
+
+	// Operator-first ctor used by the piecewise Math.sin peer (CMP nodes).
+	public BinaryRealExpression (Operator o, RealExpression l, RealExpression r)
+	{
+		op = o;
+		left = l;
+		right = r;
+	}
+
+	// Operator-first ctor for ITE: (cond ITEXPR then else).
+	public BinaryRealExpression (Operator o, RealExpression cond, RealExpression thenExpr, RealExpression elseExpr)
+	{
+		op = o;
+		left = cond;
+		right = thenExpr;
+		extra = elseExpr;
 	}
 
 	public double solution() 
@@ -62,26 +81,39 @@ public class BinaryRealExpression extends RealExpression
 		   case MUL:   return l * r;
 		   case DIV:   assert(r!=0);
 			           return l/r;
+		   case CMP:   return l < r ? 1.0 : 0.0;
+		   case ITEXPR: return l != 0.0 ? r : (extra == null ? 0.0 : extra.solution());
            default:    throw new RuntimeException("## Error: BinaryRealSolution solution: l " + l + " op " + op + " r " + r);
 		}
+	}
+
+	public RealExpression getExtra() {
+		return extra;
 	}
 
     public void getVarsVals(Map<String,Object> varsVals) {
     	left.getVarsVals(varsVals);
     	right.getVarsVals(varsVals);
+	if (extra != null) extra.getVarsVals(varsVals);
     }
-	
+
 	public String stringPC() {
+		if (extra != null)
+			return "(ite " + left.stringPC() + " " + right.stringPC() + " " + extra.stringPC() + ")";
 		return "(" + left.stringPC() + op.toString() + right.stringPC() + ")";
 	}
 
 	public String toString () 
 	{
+		if (extra != null)
+			return "(ite " + left.toString() + " " + right.toString() + " " + extra.toString() + ")";
 		return "(" + left.toString() + op.toString() + right.toString() + ")";
 	}
 
 	public String prefix_notation ()
 	{
+		if (extra != null)
+			return "(ite " + left.prefix_notation() + " " + right.prefix_notation() + " " + extra.prefix_notation() + ")";
 		return "(" + op.prefix_notation() + " "+left.prefix_notation()+" "  + right.prefix_notation() + ")";
 	}
 	
@@ -103,6 +135,7 @@ public class BinaryRealExpression extends RealExpression
 		visitor.preVisit(this);
 		left.accept(visitor);
 		right.accept(visitor);
+		if (extra != null) extra.accept(visitor);
 		visitor.postVisit(this);
 	}
 

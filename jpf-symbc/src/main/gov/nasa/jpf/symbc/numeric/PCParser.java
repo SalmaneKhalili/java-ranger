@@ -314,6 +314,27 @@ public class PCParser {
           else
             return pb.and(getExpression(e_leftRef),getExpression(e_rightRef));
 
+        case CMP:
+          // Comparison node used as the guard of an ITE expression (e.g. the piecewise
+          // Math.sin peer builds x CMP threshold meaning x < threshold). Translates to a
+          // boolean (BoolExpr / mkFPLt / mkLt) that feeds pb.ite().
+          if (e_leftRef instanceof RealConstant && e_rightRef instanceof RealConstant)
+            throw new RuntimeException("## Error: this is not a symbolic expression"); //
+          else if (e_leftRef instanceof RealConstant)
+            return pb.lt(pb.makeRealConst(((RealConstant)e_leftRef).value), getExpression(e_rightRef));
+          else if (e_rightRef instanceof RealConstant)
+            return pb.lt(getExpression(e_leftRef), pb.makeRealConst(((RealConstant)e_rightRef).value));
+          else
+            return pb.lt(getExpression(e_leftRef), getExpression(e_rightRef));
+        case ITEXPR:
+          {
+            // (cond ITEXPR then else): cond is a CMP node -> BoolExpr; then/else are expressions.
+            Object cond = getExpression(e_leftRef);
+            Object thenExpr = getExpression(e_rightRef);
+            Object elseExpr = getExpression(((BinaryRealExpression)eRef).getExtra());
+            return pb.ite(cond, thenExpr, elseExpr);
+          }
+
         default:
           throw new RuntimeException("## Error: Expression " + eRef);
       }
