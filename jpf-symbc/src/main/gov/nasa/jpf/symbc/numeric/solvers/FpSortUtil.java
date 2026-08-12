@@ -20,7 +20,10 @@ package gov.nasa.jpf.symbc.numeric.solvers;
 
 import com.microsoft.z3.Context;
 import com.microsoft.z3.FPSort;
+import gov.nasa.jpf.search.Search;
+import gov.nasa.jpf.symbc.MantissaWarningListener;
 import gov.nasa.jpf.symbc.SymbolicInstructionFactory;
+import gov.nasa.jpf.vm.VM;
 
 public class FpSortUtil {
 
@@ -43,6 +46,15 @@ public class FpSortUtil {
             int ieeeSbits = (bitVectorLength == 32) ? 24 : 53;
             if (SymbolicInstructionFactory.fpMantissa != ieeeSbits) {
                 reducedSortUsed = true;
+
+                VM vm = VM.getVM();
+                if (vm != null && vm.getSearch() != null) {
+                    Search search = vm.getSearch();
+                    if (!search.hasListenerOfType(MantissaWarningListener.class)) {
+                        search.addListener(new MantissaWarningListener());
+                    }
+                }
+
                 int ebits = (bitVectorLength == 32) ? 8 : 11;
                 return ctx.mkFPSort(ebits, SymbolicInstructionFactory.fpMantissa);
             }
@@ -56,5 +68,12 @@ public class FpSortUtil {
      */
     public static boolean isReducedSortUsed() {
         return reducedSortUsed;
+    }
+
+    /**
+     * Resets the reduced sort usage flag.
+     */
+    public static void reset() {
+        reducedSortUsed = false;
     }
 }

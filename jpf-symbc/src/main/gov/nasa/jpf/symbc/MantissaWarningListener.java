@@ -32,7 +32,15 @@ import gov.nasa.jpf.symbc.numeric.solvers.FpSortUtil;
  */
 public class MantissaWarningListener extends ListenerAdapter {
 
+    public MantissaWarningListener() {
+    }
+
     public MantissaWarningListener(Config conf, JPF jpf) {
+    }
+
+    @Override
+    public void searchStarted(Search search) {
+        FpSortUtil.reset();
     }
 
     @Override
