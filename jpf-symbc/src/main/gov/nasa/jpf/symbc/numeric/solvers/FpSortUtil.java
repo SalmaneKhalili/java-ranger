@@ -24,18 +24,37 @@ import gov.nasa.jpf.symbc.SymbolicInstructionFactory;
 
 public class FpSortUtil {
 
+    private static boolean reducedSortUsed = false;
+
     /**
      * Returns the Z3 FP sort for the given bit-vector length, honoring the
      * custom significand size configured via {@code symbolic.mantissa}.
      * {@code symbolic.mantissa} is the number of significand bits (including
      * the implicit hidden bit); 0 (default) means the standard IEEE 754 sort:
      * 24 bits for float (mkFPSort32) and 53 for double (mkFPSort64).
+     *
+     * Whenever the requested significand differs from the IEEE 754 default for
+     * the given bit-vector length, the sort is flagged as reduced so that
+     * listeners can warn the user that results may not match normal Java FP
+     * semantics.
      */
     public static FPSort sortFor(Context ctx, int bitVectorLength) {
         if (SymbolicInstructionFactory.fpMantissa > 0) {
-            int ebits = (bitVectorLength == 32) ? 8 : 11;
-            return ctx.mkFPSort(ebits, SymbolicInstructionFactory.fpMantissa);
+            int ieeeSbits = (bitVectorLength == 32) ? 24 : 53;
+            if (SymbolicInstructionFactory.fpMantissa != ieeeSbits) {
+                reducedSortUsed = true;
+                int ebits = (bitVectorLength == 32) ? 8 : 11;
+                return ctx.mkFPSort(ebits, SymbolicInstructionFactory.fpMantissa);
+            }
         }
         return (bitVectorLength == 32) ? ctx.mkFPSort32() : ctx.mkFPSort64();
+    }
+
+    /**
+     * Whether a reduced (non-IEEE) significand sort has actually been used
+     * during this run.
+     */
+    public static boolean isReducedSortUsed() {
+        return reducedSortUsed;
     }
 }
