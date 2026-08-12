@@ -590,6 +590,12 @@ public class SymbolicInstructionFactory extends gov.nasa.jpf.jvm.bytecode.Instru
 	static public boolean inf;
 
 	/*
+	 * Number of significand bits (including hidden bit) for the custom FP sort.
+	 * 0 (default) means use the standard IEEE 754 sort: 24 for float, 53 for double.
+	 */
+	static public int fpMantissa;
+
+	/*
 	 * Concolic mode where we concrete execute for now
 	 * only Math operations
 	 */
@@ -814,6 +820,10 @@ public class SymbolicInstructionFactory extends gov.nasa.jpf.jvm.bytecode.Instru
 		/* use infinites for reals in Z3? */
 		inf = conf.getBoolean("symbolic.inf", false);
 		if (inf&&debugMode) System.out.println("Using infinities for reals in Z3Bitvector.");
+
+		/* custom FP sort significand bits (including hidden bit); 0 = standard IEEE */
+		fpMantissa = conf.getInt("symbolic.mantissa", 0);
+		if (fpMantissa > 0 && debugMode) System.out.println("Custom FP sort significand bits: " + fpMantissa);
 
 		MinMax.collectMinMaxInformation(conf);
 		/* no longer required here, now read in MinMax, see line above

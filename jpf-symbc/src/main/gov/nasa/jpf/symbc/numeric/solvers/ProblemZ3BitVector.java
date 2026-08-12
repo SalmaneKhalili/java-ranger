@@ -192,7 +192,7 @@ public class ProblemZ3BitVector extends ProblemGeneral {
     @Override
     public Object sin(Object exp) {
         try {
-            FPSort sort = (bitVectorLength == 32) ? ctx.mkFPSort32() : ctx.mkFPSortDouble();
+            FPSort sort = FpSortUtil.sortFor(ctx, bitVectorLength);
             String name = "_sin_" + (sinVarCount++);
             FPExpr result = (FPExpr) ctx.mkConst(name, sort);
             FPExpr lo = ctx.mkFP(-1.0, sort);
@@ -255,7 +255,7 @@ public class ProblemZ3BitVector extends ProblemGeneral {
                         continue;
                     }
                     double sinValue = Math.sin(v);
-                    FPSort sort = (ps.sortBits == 32) ? ctx.mkFPSort32() : ctx.mkFPSortDouble();
+                    FPSort sort = FpSortUtil.sortFor(ctx, ps.sortBits);
                     solver.add(ctx.mkFPEq(ps.resultVar, ctx.mkFP(sinValue, sort)));
                     idx++;
                 }
@@ -273,7 +273,7 @@ public class ProblemZ3BitVector extends ProblemGeneral {
                 idx = 0;
                 for (PendingSin ps : pendingSins) {
                     double v = argValues[idx];
-                    FPSort sort = (ps.sortBits == 32) ? ctx.mkFPSort32() : ctx.mkFPSortDouble();
+                    FPSort sort = FpSortUtil.sortFor(ctx, ps.sortBits);
                     if (Double.isNaN(v)) {
                         solver.add(ctx.mkNot(ctx.mkFPIsNaN((FPExpr) ps.argExpr)));
                     } else if (Double.isInfinite(v)) {
@@ -297,7 +297,7 @@ public class ProblemZ3BitVector extends ProblemGeneral {
                 boolean feasible = true;
                 int idx = 0;
                 for (PendingSin ps : pendingSins) {
-                    FPSort sort = (ps.sortBits == 32) ? ctx.mkFPSort32() : ctx.mkFPSortDouble();
+                    FPSort sort = FpSortUtil.sortFor(ctx, ps.sortBits);
                     double sinValue = Math.sin(sample);
                     solver.add(ctx.mkFPEq(ps.resultVar, ctx.mkFP(sinValue, sort)));
                     if (ps.argExpr instanceof FPExpr) {
@@ -488,11 +488,12 @@ public class ProblemZ3BitVector extends ProblemGeneral {
     public Object makeRealVar(String name, double min, double max) {
         try {
             if (useFpForReals) {
+                FPSort fpSort = FpSortUtil.sortFor(ctx, this.bitVectorLength);
                 if (this.bitVectorLength == 32) {
-                    FPExpr expr = (FPExpr) ctx.mkConst(name, ctx.mkFPSort32());
+                    FPExpr expr = (FPExpr) ctx.mkConst(name, fpSort);
                     BoolExpr inBounds = ctx.mkAnd(
-                        ctx.mkFPGEq(expr, ctx.mkFP(min, ctx.mkFPSort32())),
-                        ctx.mkFPLEq(expr, ctx.mkFP(max, ctx.mkFPSort32())));
+                        ctx.mkFPGEq(expr, ctx.mkFP(min, fpSort)),
+                        ctx.mkFPLEq(expr, ctx.mkFP(max, fpSort)));
                     BoolExpr isNaN = ctx.mkFPIsNaN(expr);
                     if (SymbolicInstructionFactory.inf) {
                         BoolExpr isInfinity = ctx.mkFPIsInfinite(expr);
@@ -503,10 +504,10 @@ public class ProblemZ3BitVector extends ProblemGeneral {
 
                     return expr;
                 } else {
-                    FPExpr expr = (FPExpr) ctx.mkConst(name, ctx.mkFPSortDouble());
+                    FPExpr expr = (FPExpr) ctx.mkConst(name, fpSort);
                     BoolExpr inBounds = ctx.mkAnd(
-                        ctx.mkFPGEq(expr, ctx.mkFP(min, ctx.mkFPSortDouble())),
-                        ctx.mkFPLEq(expr, ctx.mkFP(max, ctx.mkFPSortDouble())));
+                        ctx.mkFPGEq(expr, ctx.mkFP(min, fpSort)),
+                        ctx.mkFPLEq(expr, ctx.mkFP(max, fpSort)));
                     BoolExpr isNaN = ctx.mkFPIsNaN(expr);
                     if (SymbolicInstructionFactory.inf) {
                         BoolExpr isInfinity = ctx.mkFPIsInfinite(expr);
@@ -1036,7 +1037,7 @@ public class ProblemZ3BitVector extends ProblemGeneral {
             } else if (exp instanceof IntExpr) {
                 return ctx.mkDiv(ctx.mkInt(value), (IntExpr) exp);
             } else if (useFpForReals && exp instanceof FPExpr) {
-                FPSort sort = this.bitVectorLength == 32 ? ctx.mkFPSort32() : ctx.mkFPSort64();
+                FPSort sort = FpSortUtil.sortFor(ctx, this.bitVectorLength);
                 return ctx.mkFPDiv(ctx.mkFPRoundNearestTiesToEven(), ctx.mkFPNumeral(value, sort), (FPExpr) exp);
             } else {
                 throw new RuntimeException();
@@ -1056,7 +1057,7 @@ public class ProblemZ3BitVector extends ProblemGeneral {
             } else if (exp instanceof IntExpr) {
                 return ctx.mkDiv((IntExpr) exp, ctx.mkInt(value));
             } else if (useFpForReals && exp instanceof FPExpr) {
-                FPSort sort = this.bitVectorLength == 32 ? ctx.mkFPSort32() : ctx.mkFPSort64();
+                FPSort sort = FpSortUtil.sortFor(ctx, this.bitVectorLength);
                 return ctx.mkFPDiv(ctx.mkFPRoundNearestTiesToEven(), (FPExpr) exp, ctx.mkFPNumeral(value, sort));
             } else {
                 throw new RuntimeException();
@@ -1361,7 +1362,7 @@ public class ProblemZ3BitVector extends ProblemGeneral {
     public Object eq(double value, Object exp) {
         try {
             if (useFpForReals) {
-                FPSort sort = this.bitVectorLength == 32 ? ctx.mkFPSort32() : ctx.mkFPSort64();
+                FPSort sort = FpSortUtil.sortFor(ctx, this.bitVectorLength);
                 return ctx.mkFPEq(ctx.mkFPNumeral(value, sort), (FPExpr) exp);
             } else {
                 return ctx.mkEq(ctx.mkReal("" + value), (Expr) exp);
@@ -1376,7 +1377,7 @@ public class ProblemZ3BitVector extends ProblemGeneral {
     public Object eq(Object exp, double value) {
         try {
             if (useFpForReals) {
-                FPSort sort = this.bitVectorLength == 32 ? ctx.mkFPSort32() : ctx.mkFPSort64();
+                FPSort sort = FpSortUtil.sortFor(ctx, this.bitVectorLength);
                 return ctx.mkFPEq((FPExpr) exp, ctx.mkFPNumeral(value, sort));
             } else {
                 return ctx.mkEq((Expr) exp, ctx.mkReal("" + value));
@@ -1391,7 +1392,7 @@ public class ProblemZ3BitVector extends ProblemGeneral {
     public Object neq(double value, Object exp) {
         try {
             if (useFpForReals) {
-                FPSort sort = this.bitVectorLength == 32 ? ctx.mkFPSort32() : ctx.mkFPSort64();
+                FPSort sort = FpSortUtil.sortFor(ctx, this.bitVectorLength);
                 return ctx.mkNot(ctx.mkFPEq(ctx.mkFPNumeral(value, sort), (FPExpr) exp));
             } else {
                 return ctx.mkNot(ctx.mkEq(ctx.mkReal("" + value), (Expr) exp));
@@ -1406,7 +1407,7 @@ public class ProblemZ3BitVector extends ProblemGeneral {
     public Object neq(Object exp, double value) {
         try {
             if (useFpForReals) {
-                FPSort sort = this.bitVectorLength == 32 ? ctx.mkFPSort32() : ctx.mkFPSort64();
+                FPSort sort = FpSortUtil.sortFor(ctx, this.bitVectorLength);
                 return ctx.mkNot(ctx.mkFPEq((FPExpr) exp, ctx.mkFPNumeral(value, sort)));
             } else {
                 return ctx.mkNot(ctx.mkEq((Expr) exp, ctx.mkReal("" + value)));
@@ -1448,7 +1449,7 @@ public class ProblemZ3BitVector extends ProblemGeneral {
     public Object leq(double value, Object exp) {
         try {
             if (useFpForReals) {
-                FPSort sort = this.bitVectorLength == 32 ? ctx.mkFPSort32() : ctx.mkFPSort64();
+                FPSort sort = FpSortUtil.sortFor(ctx, this.bitVectorLength);
                 return ctx.mkFPLEq(ctx.mkFPNumeral(value, sort), (FPExpr) exp);
             } else {
                 return ctx.mkLe(ctx.mkReal("" + value), (ArithExpr) exp);
@@ -1463,7 +1464,7 @@ public class ProblemZ3BitVector extends ProblemGeneral {
     public Object leq(Object exp, double value) {
         try {
             if (useFpForReals) {
-                FPSort sort = this.bitVectorLength == 32 ? ctx.mkFPSort32() : ctx.mkFPSort64();
+                FPSort sort = FpSortUtil.sortFor(ctx, this.bitVectorLength);
                 return ctx.mkFPLEq((FPExpr) exp, ctx.mkFPNumeral(value, sort));
             } else {
                 return ctx.mkLe((ArithExpr) exp, ctx.mkReal("" + value));
@@ -1478,7 +1479,7 @@ public class ProblemZ3BitVector extends ProblemGeneral {
     public Object geq(double value, Object exp) {
         try {
             if (useFpForReals) {
-                FPSort sort = this.bitVectorLength == 32 ? ctx.mkFPSort32() : ctx.mkFPSort64();
+                FPSort sort = FpSortUtil.sortFor(ctx, this.bitVectorLength);
                 return ctx.mkFPGEq(ctx.mkFPNumeral(value, sort), (FPExpr) exp);
             } else {
                 return ctx.mkGe(ctx.mkReal("" + value), (ArithExpr) exp);
@@ -1493,7 +1494,7 @@ public class ProblemZ3BitVector extends ProblemGeneral {
     public Object geq(Object exp, double value) {
         try {
             if (useFpForReals) {
-                FPSort sort = this.bitVectorLength == 32 ? ctx.mkFPSort32() : ctx.mkFPSort64();
+                FPSort sort = FpSortUtil.sortFor(ctx, this.bitVectorLength);
                 return ctx.mkFPGEq((FPExpr) exp, ctx.mkFPNumeral(value, sort));
             } else {
                 return ctx.mkGe((ArithExpr) exp, ctx.mkReal("" + value));
@@ -1508,7 +1509,7 @@ public class ProblemZ3BitVector extends ProblemGeneral {
     public Object lt(double value, Object exp) {
         try {
             if (useFpForReals) {
-                FPSort sort = this.bitVectorLength == 32 ? ctx.mkFPSort32() : ctx.mkFPSort64();
+                FPSort sort = FpSortUtil.sortFor(ctx, this.bitVectorLength);
                 return ctx.mkFPLt(ctx.mkFPNumeral(value, sort), (FPExpr) exp);
             } else {
                 return ctx.mkLt(ctx.mkReal("" + value), (ArithExpr) exp);
@@ -1523,7 +1524,7 @@ public class ProblemZ3BitVector extends ProblemGeneral {
     public Object lt(Object exp, double value) {
         try {
             if (useFpForReals) {
-                FPSort sort = this.bitVectorLength == 32 ? ctx.mkFPSort32() : ctx.mkFPSort64();
+                FPSort sort = FpSortUtil.sortFor(ctx, this.bitVectorLength);
                 return ctx.mkFPLt((FPExpr) exp, ctx.mkFPNumeral(value, sort));
             } else {
                 return ctx.mkLt((ArithExpr) exp, ctx.mkReal("" + value));
@@ -1538,7 +1539,7 @@ public class ProblemZ3BitVector extends ProblemGeneral {
     public Object gt(double value, Object exp) {
         try {
             if (useFpForReals) {
-                FPSort sort = this.bitVectorLength == 32 ? ctx.mkFPSort32() : ctx.mkFPSort64();
+                FPSort sort = FpSortUtil.sortFor(ctx, this.bitVectorLength);
                 return ctx.mkFPGt(ctx.mkFPNumeral(value, sort), (FPExpr) exp);
             } else {
                 return ctx.mkGt(ctx.mkReal("" + value), (ArithExpr) exp);
@@ -1553,7 +1554,7 @@ public class ProblemZ3BitVector extends ProblemGeneral {
     public Object gt(Object exp, double value) {
         try {
             if (useFpForReals) {
-                FPSort sort = this.bitVectorLength == 32 ? ctx.mkFPSort32() : ctx.mkFPSort64();
+                FPSort sort = FpSortUtil.sortFor(ctx, this.bitVectorLength);
                 return ctx.mkFPGt((FPExpr) exp, ctx.mkFPNumeral(value, sort));
             } else {
                 return ctx.mkGt((ArithExpr) exp, ctx.mkReal("" + value));
@@ -1568,7 +1569,7 @@ public class ProblemZ3BitVector extends ProblemGeneral {
     public Object plus(double value, Object exp) {
         try {
             if (useFpForReals) {
-                FPSort sort = this.bitVectorLength == 32 ? ctx.mkFPSort32() : ctx.mkFPSort64();
+                FPSort sort = FpSortUtil.sortFor(ctx, this.bitVectorLength);
                 return ctx.mkFPAdd(ctx.mkFPRoundNearestTiesToEven(), ctx.mkFPNumeral(value, sort), (FPExpr) exp);
             } else {
                 return ctx.mkAdd(ctx.mkReal("" + value), (ArithExpr) exp);
@@ -1583,7 +1584,7 @@ public class ProblemZ3BitVector extends ProblemGeneral {
     public Object plus(Object exp, double value) {
         try {
             if (useFpForReals) {
-                FPSort sort = this.bitVectorLength == 32 ? ctx.mkFPSort32() : ctx.mkFPSort64();
+                FPSort sort = FpSortUtil.sortFor(ctx, this.bitVectorLength);
                 return ctx.mkFPAdd(ctx.mkFPRoundNearestTiesToEven(), (FPExpr) exp, ctx.mkFPNumeral(value, sort));
             } else {
                 return ctx.mkAdd((ArithExpr) exp, ctx.mkReal("" + value));
@@ -1598,7 +1599,7 @@ public class ProblemZ3BitVector extends ProblemGeneral {
     public Object minus(double value, Object exp) {
         try {
             if (useFpForReals) {
-                FPSort sort = this.bitVectorLength == 32 ? ctx.mkFPSort32() : ctx.mkFPSort64();
+                FPSort sort = FpSortUtil.sortFor(ctx, this.bitVectorLength);
                 return ctx.mkFPSub(ctx.mkFPRoundNearestTiesToEven(), ctx.mkFPNumeral(value, sort), (FPExpr) exp);
             } else {
                 return ctx.mkSub(ctx.mkReal("" + value), (ArithExpr) exp);
@@ -1613,7 +1614,7 @@ public class ProblemZ3BitVector extends ProblemGeneral {
     public Object minus(Object exp, double value) {
         try {
             if (useFpForReals) {
-                FPSort sort = this.bitVectorLength == 32 ? ctx.mkFPSort32() : ctx.mkFPSort64();
+                FPSort sort = FpSortUtil.sortFor(ctx, this.bitVectorLength);
                 return ctx.mkFPSub(ctx.mkFPRoundNearestTiesToEven(), (FPExpr) exp, ctx.mkFPNumeral(value, sort));
             } else {
                 return ctx.mkSub((ArithExpr) exp, ctx.mkReal("" + value));
@@ -1628,7 +1629,7 @@ public class ProblemZ3BitVector extends ProblemGeneral {
     public Object mult(double value, Object exp) {
         try {
             if (useFpForReals) {
-                FPSort sort = this.bitVectorLength == 32 ? ctx.mkFPSort32() : ctx.mkFPSort64();
+                FPSort sort = FpSortUtil.sortFor(ctx, this.bitVectorLength);
                 return ctx.mkFPMul(ctx.mkFPRoundNearestTiesToEven(), ctx.mkFPNumeral(value, sort), (FPExpr) exp);
             } else {
                 return ctx.mkMul(ctx.mkReal("" + value), (ArithExpr) exp);
@@ -1643,7 +1644,7 @@ public class ProblemZ3BitVector extends ProblemGeneral {
     public Object mult(Object exp, double value) {
         try {
             if (useFpForReals) {
-                FPSort sort = this.bitVectorLength == 32 ? ctx.mkFPSort32() : ctx.mkFPSort64();
+                FPSort sort = FpSortUtil.sortFor(ctx, this.bitVectorLength);
                 return ctx.mkFPMul(ctx.mkFPRoundNearestTiesToEven(), (FPExpr) exp, ctx.mkFPNumeral(value, sort));
             } else {
                 return ctx.mkMul((ArithExpr) exp, ctx.mkReal("" + value));
@@ -1658,7 +1659,7 @@ public class ProblemZ3BitVector extends ProblemGeneral {
     public Object div(double value, Object exp) {
         try {
             if (useFpForReals) {
-                FPSort sort = this.bitVectorLength == 32 ? ctx.mkFPSort32() : ctx.mkFPSort64();
+                FPSort sort = FpSortUtil.sortFor(ctx, this.bitVectorLength);
                 return ctx.mkFPDiv(ctx.mkFPRoundNearestTiesToEven(), ctx.mkFPNumeral(value, sort), (FPExpr) exp);
             } else {
                 return ctx.mkDiv(ctx.mkReal("" + value), (ArithExpr) exp);
@@ -1673,7 +1674,7 @@ public class ProblemZ3BitVector extends ProblemGeneral {
     public Object div(Object exp, double value) {
         try {
             if (useFpForReals) {
-                FPSort sort = this.bitVectorLength == 32 ? ctx.mkFPSort32() : ctx.mkFPSort64();
+                FPSort sort = FpSortUtil.sortFor(ctx, this.bitVectorLength);
                 return ctx.mkFPDiv(ctx.mkFPRoundNearestTiesToEven(), (FPExpr) exp, ctx.mkFPNumeral(value, sort));
             } else {
                 return ctx.mkDiv((ArithExpr) exp, ctx.mkReal("" + value));
@@ -1716,11 +1717,7 @@ public class ProblemZ3BitVector extends ProblemGeneral {
             Sort int_type = ctx.mkBitVecSort(this.bitVectorLength);
             Sort real_type = ctx.mkRealSort();
             if (useFpForReals) {
-                if (this.bitVectorLength == 32) {
-                    real_type = ctx.mkFPSort32();
-                } else {
-                    real_type = ctx.mkFPSortDouble();
-                }
+                real_type = FpSortUtil.sortFor(ctx, this.bitVectorLength);
             }
             return ctx.mkArrayConst(name, int_type, real_type);
         } catch (Exception e) {
@@ -1802,7 +1799,7 @@ public class ProblemZ3BitVector extends ProblemGeneral {
     public Object makeRealConst(double value) {
         try {
             if (useFpForReals) {
-                FPSort sort = this.bitVectorLength == 32 ? ctx.mkFPSort32() : ctx.mkFPSort64();
+                FPSort sort = FpSortUtil.sortFor(ctx, this.bitVectorLength);
                 return ctx.mkFPNumeral(value, sort);
             }
             return ctx.mkReal("" + value);
@@ -1823,7 +1820,7 @@ public class ProblemZ3BitVector extends ProblemGeneral {
 
             fpExpr = (exp1 instanceof FPExpr ? ((FPExpr) exp1) : ((FPExpr) exp2));
 
-            FPSort sort = this.bitVectorLength == 32 ? ctx.mkFPSort32() : ctx.mkFPSort64();
+            FPSort sort = FpSortUtil.sortFor(ctx, this.bitVectorLength);
             converted = ctx.mkFPToFP(ctx.mkFPRoundTowardZero(), bvExpr, sort,true);
 
             return ctx.mkFPEq(fpExpr, converted);
