@@ -32,6 +32,6 @@ public class SubtractionOverflowTest {
   public void testFalse(int a) {
     if (a != Integer.MIN_VALUE) return; // force a to MIN_VALUE to trigger overflow
     int r = a - 1;
-    assert r != Integer.MAX_VALUE : "overflow not simulated: MIN_VALUE - 1 should wrap to MAX_VALUE";
+    assert r == Integer.MAX_VALUE : "overflow not simulated: MIN_VALUE - 1 should wrap to MAX_VALUE";
   }
 }
