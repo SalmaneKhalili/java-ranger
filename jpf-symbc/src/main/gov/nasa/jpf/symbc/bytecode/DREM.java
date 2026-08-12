@@ -78,8 +78,6 @@ public class DREM extends gov.nasa.jpf.jvm.bytecode.DREM {
             }
         }
 
-        super.execute(th);
-
         PathCondition pc;
         ChoiceGenerator<?> prev_cg = cg.getPreviousChoiceGeneratorOfType(PCChoiceGenerator.class);
 
@@ -90,20 +88,39 @@ public class DREM extends gov.nasa.jpf.jvm.bytecode.DREM {
 
         assert pc != null;
 
-        if (choice == 0) {
+        // The result value is part of the choice: each branch pushes the
+        // concrete result consistent with that branch's IEEE 754
+        // semantics, considering the dividend's IEEE 754 class as well.
+        double resultValue;
+        if (choice == 0) { // zero divisor
             pc._addDet(Comparator.EQ, sym_v1, 0);
-        } else if (choice == 1) {
+            resultValue = Double.NaN; // x % 0 = NaN
+        } else if (choice == 1) { // NaN divisor
             pc._addDet(sym_v1, Comparator.IS_NAN);
-        } else if (choice == 2) {
+            resultValue = Double.NaN; // x % NaN = NaN
+        } else if (choice == 2) { // Inf divisor
             pc._addDet(sym_v1, Comparator.IS_INF);
-        } else {
+            // Inf % Inf = NaN, NaN % Inf = NaN, otherwise x % Inf = x
+            if (Double.isInfinite(v2) || Double.isNaN(v2))
+                resultValue = Double.NaN;
+            else
+                resultValue = v2;
+        } else { // normal divisor (non-zero, non-NaN, non-Inf)
             pc._addDet(Comparator.NE, sym_v1, 0);
             pc._addDet(sym_v1, Comparator.NOT_IS_NAN);
             pc._addDet(sym_v1, Comparator.NOT_IS_INF);
+            // Concrete remainder handles a special dividend natively
+            // (NaN % x = NaN, Inf % x = NaN, 0 % x = +-0).
+            resultValue = v2 % v1;
         }
 
         if (pc.simplify()) {
             ((PCChoiceGenerator) cg).setCurrentPC(pc);
+
+            sf = th.getModifiableTopFrame();
+            sf.popDouble();
+            sf.popDouble();
+            sf.pushDouble(resultValue);
 
             RealExpression result;
             if (sym_v2 != null)
