@@ -325,24 +325,189 @@ public class JPF_java_lang_Math extends NativePeer{
 		  // sin() becomes a nested symbolic ITE tree whose leaves are single affine
 		  // expressions (one fp.mul + one fp.add each - minimal circuit depth for the Z3
 		  // bitvector solver). Each comparison is x < xi+1 (Operator.CMP == strict less-than).
+		  //
+		  // PATH-CONDITION PRUNING: before building the ITE tree, scan the path condition
+		  // for interval constraints on the symbolic argument. Only include segments whose
+		  // domain overlaps with the PC-implied interval. This eliminates unreachable
+		  // segments and dramatically reduces Z3 solve time (especially for fp.eq checks).
 		  final int n = PIECEWISE_LINEAR_SEGMENTS;
-		  final double lo = -Math.PI / 2.0;
-		  final double hi =  Math.PI / 2.0;
-		  final double width = (hi - lo) / n;
-		  RealExpression result = null;
-		  for (int i = n - 1; i >= 0; i--) {
-			  final double xi  = lo + i * width;
-			  final double xi1 = lo + (i + 1) * width;
-			  final double m = (Math.sin(xi1) - Math.sin(xi)) / (xi1 - xi);
-			  final double b = Math.sin(xi) - m * xi;
-			  RealExpression segment = new RealConstant(m)._mul(sym_arg)._plus(new RealConstant(b));
-			  if (result == null) {
-				  result = segment;
+		  final double FULL_LO = -Math.PI / 2.0;
+		  final double FULL_HI =  Math.PI / 2.0;
+
+		  // --- Extract interval bounds from path condition ---
+		  double pc_lo = FULL_LO;
+		  double pc_hi = FULL_HI;
+		  try {
+			  PathCondition pc = PathCondition.getPC(env);
+			  if (pc != null && pc.header != null) {
+				  // Walk the constraint chain to find bounds on sym_arg
+				  Constraint c = pc.header;
+				  while (c != null) {
+					  Expression left  = c.getLeft();
+					  Expression right = c.getRight();
+					  Comparator comp = c.getComparator();
+					  if (right != null) {
+						  // Case 1: sym_arg on the LEFT, constant on the RIGHT
+						  if (left == sym_arg && right instanceof RealConstant) {
+							  double val = ((RealConstant) right).value;
+							  switch (comp) {
+								  case GE: case GT:  pc_lo = Math.max(pc_lo, val); break;
+								  case LE: case LT:  pc_hi = Math.min(pc_hi, val); break;
+								  case EQ:  pc_lo = pc_hi = val; break;
+							  }
+						  // Case 2: constant on the LEFT, sym_arg on the RIGHT
+						  } else if (right == sym_arg && left instanceof RealConstant) {
+							  double val = ((RealConstant) left).value;
+							  switch (comp) {
+								  case LE: case LT:  pc_lo = Math.max(pc_lo, val); break;
+								  case GE: case GT:  pc_hi = Math.min(pc_hi, val); break;
+								  case EQ:  pc_lo = pc_hi = val; break;
+							  }
+						  }
+					  }
+					  c = c.and;
+				  }
+			  }
+		  } catch (Exception e) {
+			  // Fallback: use full range if PC extraction fails
+			  pc_lo = FULL_LO;
+			  pc_hi = FULL_HI;
+		  }
+
+		  // --- Collect overlapping segments, split at x=0, coarsen per polarity ---
+		  // Z3 fp.eq on mixed-polarity ITE trees is the bottleneck (TIMEOUT at 16 segs,
+		  // 180s at 4 segs). Splitting into separate negative/positive sub-trees lets Z3
+		  // immediately discard one half when the PC constrains x's sign.
+		  final int MAX_PER_POLARITY = 2;
+		  final double width = (FULL_HI - FULL_LO) / n;
+
+		  // Phase 1: collect all segments overlapping the PC range
+		  double[] segLo  = new double[n * 2]; // may double from zero-split
+		  double[] segHi  = new double[n * 2];
+		  double[] segM   = new double[n * 2];
+		  double[] segB   = new double[n * 2];
+		  int rawCount = 0;
+
+		  for (int i = 0; i < n; i++) {
+			  final double xi  = FULL_LO + i * width;
+			  final double xi1 = FULL_LO + (i + 1) * width;
+
+			  if (xi1 <= pc_lo || xi >= pc_hi) {
+				  continue;
+			  }
+
+			  // Clamp to PC range
+			  double lo = Math.max(xi, pc_lo);
+			  double hi = Math.min(xi1, pc_hi);
+
+			  // If segment crosses x=0, split into two (negative + positive)
+			  if (lo < 0.0 && hi > 0.0) {
+				  // Negative half: [lo, 0]
+				  segLo[rawCount] = lo;
+				  segHi[rawCount] = 0.0;
+				  segM[rawCount]  = (Math.sin(0.0) - Math.sin(lo)) / (0.0 - lo);
+				  segB[rawCount]  = Math.sin(lo) - segM[rawCount] * lo;
+				  rawCount++;
+				  // Positive half: [0, hi]
+				  segLo[rawCount] = 0.0;
+				  segHi[rawCount] = hi;
+				  segM[rawCount]  = (Math.sin(hi) - Math.sin(0.0)) / (hi - 0.0);
+				  segB[rawCount]  = Math.sin(0.0) - segM[rawCount] * 0.0;
+				  rawCount++;
 			  } else {
-				  RealExpression cond = new BinaryRealExpression(Operator.CMP, sym_arg, new RealConstant(xi1));
-				  result = new BinaryRealExpression(Operator.ITEXPR, cond, segment, result);
+				  segLo[rawCount] = lo;
+				  segHi[rawCount] = hi;
+				  segM[rawCount]  = (Math.sin(hi) - Math.sin(lo)) / (hi - lo);
+				  segB[rawCount]  = Math.sin(lo) - segM[rawCount] * lo;
+				  rawCount++;
 			  }
 		  }
+
+		  // Phase 2: split into negative and positive groups, coarsen each
+		  // Helper: coarsen a sub-array [start, start+count) by pair-merging
+		  int negStart = 0, negCount = 0, posStart = 0, posCount = 0;
+		  for (int r = 0; r < rawCount; r++) {
+			  if (segHi[r] <= 0.0) {
+				  if (negCount == 0) negStart = r;
+				  negCount++;
+			  } else {
+				  if (posCount == 0) posStart = r;
+				  posCount++;
+			  }
+		  }
+
+		  // Coarsen each polarity group
+		  int[] counts = {negCount, posCount};
+		  int[] starts = {negStart, posStart};
+		  for (int g = 0; g < 2; g++) {
+			  int cnt = counts[g];
+			  int st  = starts[g];
+			  while (cnt > MAX_PER_POLARITY && cnt > 1) {
+				  int wi = st;
+				  for (int r = st; r < st + cnt; r += 2) {
+					  if (r + 1 < st + cnt) {
+						  segLo[wi] = segLo[r];
+						  segHi[wi] = segHi[r + 1];
+						  segM[wi]  = (Math.sin(segHi[wi]) - Math.sin(segLo[wi])) / (segHi[wi] - segLo[wi]);
+						  segB[wi]  = Math.sin(segLo[wi]) - segM[wi] * segLo[wi];
+					  } else {
+						  segLo[wi] = segLo[r];
+						  segHi[wi] = segHi[r];
+						  segM[wi]  = segM[r];
+						  segB[wi]  = segB[r];
+					  }
+					  wi++;
+				  }
+				  cnt = wi - st;
+			  }
+			  counts[g] = cnt;
+		  }
+		  negCount = counts[0];
+		  posCount = counts[1];
+
+		  // Phase 3: build ITE sub-trees for each polarity, then combine
+		  // Negative sub-tree: segments from negStart..negStart+negCount
+		  RealExpression negTree = null;
+		  for (int r = negStart + negCount - 1; r >= negStart; r--) {
+			  RealExpression segment = new RealConstant(segM[r])._mul(sym_arg)._plus(new RealConstant(segB[r]));
+			  if (negTree == null) {
+				  negTree = segment;
+			  } else {
+				  RealExpression cond = new BinaryRealExpression(Operator.CMP, sym_arg, new RealConstant(segHi[r]));
+				  negTree = new BinaryRealExpression(Operator.ITEXPR, cond, segment, negTree);
+			  }
+		  }
+
+		  // Positive sub-tree: segments from posStart..posStart+posCount
+		  RealExpression posTree = null;
+		  for (int r = posStart + posCount - 1; r >= posStart; r--) {
+			  RealExpression segment = new RealConstant(segM[r])._mul(sym_arg)._plus(new RealConstant(segB[r]));
+			  if (posTree == null) {
+				  posTree = segment;
+			  } else {
+				  RealExpression cond = new BinaryRealExpression(Operator.CMP, sym_arg, new RealConstant(segHi[r]));
+				  posTree = new BinaryRealExpression(Operator.ITEXPR, cond, segment, posTree);
+			  }
+		  }
+
+		  // Phase 4: combine with polarity check: ite(x < 0, negTree, posTree)
+		  RealExpression result;
+		  if (negTree != null && posTree != null) {
+			  RealExpression polarityCond = new BinaryRealExpression(Operator.CMP, sym_arg, new RealConstant(0.0));
+			  result = new BinaryRealExpression(Operator.ITEXPR, polarityCond, negTree, posTree);
+		  } else if (negTree != null) {
+			  result = negTree;
+		  } else if (posTree != null) {
+			  result = posTree;
+		  } else {
+			  final double m = (Math.sin(pc_hi) - Math.sin(pc_lo)) / (pc_hi - pc_lo);
+			  final double b = Math.sin(pc_lo) - m * pc_lo;
+			  result = new RealConstant(m)._mul(sym_arg)._plus(new RealConstant(b));
+			  negCount = 0; posCount = 0;
+		  }
+
+		  int totalActive = negCount + posCount;
+		  System.out.println("[sin-pruning] PC=[" + pc_lo + ", " + pc_hi + "] raw=" + rawCount + " neg=" + negCount + " pos=" + posCount + "/" + n);
 		  env.setReturnAttribute(result);
 		  return 0;
 	  }
