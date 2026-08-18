@@ -378,10 +378,26 @@ public class JPF_java_lang_Math extends NativePeer{
 		  // Z3 fp.eq on mixed-polarity ITE trees is the bottleneck (TIMEOUT at 16 segs,
 		  // 180s at 4 segs). Splitting into separate negative/positive sub-trees lets Z3
 		  // immediately discard one half when the PC constrains x's sign.
+		  //
+		  // CURVATURE-WEIGHTED BREAKPOINTS: segments are denser near ±π/2 where
+		  // |sin''(x)| = |sin(x)| is high (max curvature), sparser near x=0 where
+		  // sin is nearly linear. Generated via inverse CDF of |sin(x)| density:
+		  //   cumulative(x) = ∫|sin(t)|dt from -π/2 to x
+		  //   breakpoint[k] = cumulative^{-1}(k * 2 / n)
 		  final int MAX_PER_POLARITY = 2;
-		  final double width = (FULL_HI - FULL_LO) / n;
 
-		  // Phase 1: collect all segments overlapping the PC range
+		  // Phase 1: generate curvature-weighted breakpoints
+		  double[] bp = new double[n + 1];
+		  for (int k = 0; k <= n; k++) {
+			  double cumul = k * 2.0 / n;
+			  if (k <= n / 2) {
+				  bp[k] = -Math.acos(cumul);
+			  } else {
+				  bp[k] = Math.acos(2.0 - cumul);
+			  }
+		  }
+
+		  // Phase 2: collect all segments overlapping the PC range
 		  double[] segLo  = new double[n * 2]; // may double from zero-split
 		  double[] segHi  = new double[n * 2];
 		  double[] segM   = new double[n * 2];
@@ -389,8 +405,8 @@ public class JPF_java_lang_Math extends NativePeer{
 		  int rawCount = 0;
 
 		  for (int i = 0; i < n; i++) {
-			  final double xi  = FULL_LO + i * width;
-			  final double xi1 = FULL_LO + (i + 1) * width;
+			  final double xi  = bp[i];
+			  final double xi1 = bp[i + 1];
 
 			  if (xi1 <= pc_lo || xi >= pc_hi) {
 				  continue;
@@ -507,7 +523,7 @@ public class JPF_java_lang_Math extends NativePeer{
 		  }
 
 		  int totalActive = negCount + posCount;
-		  System.out.println("[sin-pruning] PC=[" + pc_lo + ", " + pc_hi + "] raw=" + rawCount + " neg=" + negCount + " pos=" + posCount + "/" + n);
+		  System.out.println("[sin-curve] PC=[" + pc_lo + ", " + pc_hi + "] raw=" + rawCount + " neg=" + negCount + " pos=" + posCount + "/" + n);
 		  env.setReturnAttribute(result);
 		  return 0;
 	  }
