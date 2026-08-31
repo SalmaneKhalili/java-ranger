@@ -330,8 +330,13 @@ public class PCParser {
           {
             // (cond ITEXPR then else): cond is a CMP node -> BoolExpr; then/else are expressions.
             Object cond = getExpression(e_leftRef);
-            Object thenExpr = getExpression(e_rightRef);
-            Object elseExpr = getExpression(((BinaryRealExpression)eRef).getExtra());
+            Object thenExpr = (e_rightRef instanceof RealConstant)
+                ? pb.makeRealConst(((RealConstant)e_rightRef).value)
+                : getExpression(e_rightRef);
+            RealExpression elseExprRef = ((BinaryRealExpression)eRef).getExtra();
+            Object elseExpr = (elseExprRef instanceof RealConstant)
+                ? pb.makeRealConst(((RealConstant)elseExprRef).value)
+                : getExpression(elseExprRef);
             return pb.ite(cond, thenExpr, elseExpr);
           }
 

@@ -374,7 +374,7 @@ public class JPF_java_lang_Math extends NativePeer{
 			  pc_hi = FULL_HI;
 		  }
 
-		  // --- Collect overlapping segments, split at x=0, coarsen per polarity ---
+		  // --- Collect overlapping segments, split at x=0 ---
 		  // Z3 fp.eq on mixed-polarity ITE trees is the bottleneck (TIMEOUT at 16 segs,
 		  // 180s at 4 segs). Splitting into separate negative/positive sub-trees lets Z3
 		  // immediately discard one half when the PC constrains x's sign.
@@ -384,7 +384,6 @@ public class JPF_java_lang_Math extends NativePeer{
 		  // sin is nearly linear. Generated via inverse CDF of |sin(x)| density:
 		  //   cumulative(x) = ∫|sin(t)|dt from -π/2 to x
 		  //   breakpoint[k] = cumulative^{-1}(k * 2 / n)
-		  final int MAX_PER_POLARITY = 2;
 
 		  // Phase 1: generate curvature-weighted breakpoints
 		  double[] bp = new double[n + 1];
@@ -439,8 +438,7 @@ public class JPF_java_lang_Math extends NativePeer{
 			  }
 		  }
 
-		  // Phase 2: split into negative and positive groups, coarsen each
-		  // Helper: coarsen a sub-array [start, start+count) by pair-merging
+		  // Phase 2: split into negative and positive groups
 		  int negStart = 0, negCount = 0, posStart = 0, posCount = 0;
 		  for (int r = 0; r < rawCount; r++) {
 			  if (segHi[r] <= 0.0) {
@@ -451,35 +449,6 @@ public class JPF_java_lang_Math extends NativePeer{
 				  posCount++;
 			  }
 		  }
-
-		  // Coarsen each polarity group
-		  int[] counts = {negCount, posCount};
-		  int[] starts = {negStart, posStart};
-		  for (int g = 0; g < 2; g++) {
-			  int cnt = counts[g];
-			  int st  = starts[g];
-			  while (cnt > MAX_PER_POLARITY && cnt > 1) {
-				  int wi = st;
-				  for (int r = st; r < st + cnt; r += 2) {
-					  if (r + 1 < st + cnt) {
-						  segLo[wi] = segLo[r];
-						  segHi[wi] = segHi[r + 1];
-						  segM[wi]  = (Math.sin(segHi[wi]) - Math.sin(segLo[wi])) / (segHi[wi] - segLo[wi]);
-						  segB[wi]  = Math.sin(segLo[wi]) - segM[wi] * segLo[wi];
-					  } else {
-						  segLo[wi] = segLo[r];
-						  segHi[wi] = segHi[r];
-						  segM[wi]  = segM[r];
-						  segB[wi]  = segB[r];
-					  }
-					  wi++;
-				  }
-				  cnt = wi - st;
-			  }
-			  counts[g] = cnt;
-		  }
-		  negCount = counts[0];
-		  posCount = counts[1];
 
 		  // Phase 3: build ITE sub-trees for each polarity, then combine
 		  // Negative sub-tree: segments from negStart..negStart+negCount
@@ -522,7 +491,16 @@ public class JPF_java_lang_Math extends NativePeer{
 			  negCount = 0; posCount = 0;
 		  }
 
-		  int totalActive = negCount + posCount;
+		  // Phase 5: structurally clamp to [-1, 1] — sin(x) is always in this range.
+		  // Wrapping in ITE clamps prevents Z3 from finding false counterexamples where
+		  // a secant line extrapolated near {0, ±π/2} produces values outside [-1, 1].
+		  RealExpression sinLo = new RealConstant(-1.0);
+		  RealExpression sinHi = new RealConstant(1.0);
+		  RealExpression loClamp = new BinaryRealExpression(Operator.CMP, result, sinLo);
+		  RealExpression hiClamp = new BinaryRealExpression(Operator.CMP, sinHi, result);
+		  result = new BinaryRealExpression(Operator.ITEXPR, loClamp, sinLo,
+				  new BinaryRealExpression(Operator.ITEXPR, hiClamp, sinHi, result));
+
 		  System.out.println("[sin-curve] PC=[" + pc_lo + ", " + pc_hi + "] raw=" + rawCount + " neg=" + negCount + " pos=" + posCount + "/" + n);
 		  env.setReturnAttribute(result);
 		  return 0;
