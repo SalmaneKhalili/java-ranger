@@ -1250,6 +1250,42 @@ public class ProblemZ3BitVector extends ProblemGeneral {
     }
 
     @Override
+    public Object isZero(Object exp) {
+        try {
+            if (useFpForReals)
+                return ctx.mkFPIsZero((FPExpr) exp);
+            throw new RuntimeException("## Error Z3: isZero requires floating-point mode");
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("## Error Z3: isZero(Object) failed.\n" + e);
+        }
+    }
+
+    @Override
+    public Object isPositive(Object exp) {
+        try {
+            if (useFpForReals)
+                return ctx.mkFPIsPositive((FPExpr) exp);
+            throw new RuntimeException("## Error Z3: isPositive requires floating-point mode");
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("## Error Z3: isPositive(Object) failed.\n" + e);
+        }
+    }
+
+    @Override
+    public Object isNegative(Object exp) {
+        try {
+            if (useFpForReals)
+                return ctx.mkFPIsNegative((FPExpr) exp);
+            throw new RuntimeException("## Error Z3: isNegative requires floating-point mode");
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("## Error Z3: isNegative(Object) failed.\n" + e);
+        }
+    }
+
+    @Override
     public Object leq(double value, Object exp) {
         try {
             if (useFpForReals) {
@@ -1737,7 +1773,19 @@ public class ProblemZ3BitVector extends ProblemGeneral {
 
     @Override
     public void postLogicalOR(Object[] constraint) {
-        // TODO Auto-generated method stub
-        throw new RuntimeException("## Error Z3 \n");
+        try {
+            if (useFpForReals) {
+                BoolExpr[] exprs = new BoolExpr[constraint.length];
+                for (int i = 0; i < constraint.length; i++) {
+                    exprs[i] = (BoolExpr) constraint[i];
+                }
+                solver.add(ctx.mkOr(exprs));
+            } else {
+                throw new RuntimeException("## Error Z3: postLogicalOR requires floating-point mode");
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("## Error Z3: postLogicalOR(Object[]) failed.\n" + e);
+        }
     }
 }

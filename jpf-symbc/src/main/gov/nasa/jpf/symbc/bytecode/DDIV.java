@@ -45,14 +45,37 @@ import gov.nasa.jpf.vm.ChoiceGenerator;
 import gov.nasa.jpf.vm.Instruction;
 import gov.nasa.jpf.vm.StackFrame;
 import gov.nasa.jpf.vm.ThreadInfo;
-import gov.nasa.jpf.vm.Types;
 
 /**
- * Divide 2 doubles ..., value1, value2 => ..., value2/value1
- * 
  * YN: fixed choice selection in symcrete support (Yannic Noller <nolleryc@gmail.com>)
+ *
+ * IEEE 754 division result = A / B.  When at least one operand is symbolic,
+ * the JVM's concrete ddiv semantics (x/0 = +-Inf, 0/0 = NaN, x/+-Inf = +-0,
+ * finite/finite = a rounded real, no ArithmeticException) are explored as six
+ * outcome arms, each guarded by a conjunction of unary *operand* class
+ * predicates (on A and B), so the path condition never carries an fp.div term
+ * -- which the FCMP/veritesting harness cannot solve efficiently:
+ *
+ *   1  NaN       isNaN(A) || isNaN(B) || (isZero(A)&&isZero(B)) ||
+ *                (isInf(A)&&isInf(B))
+ *   2  +Inf      zero divisor with non-zero, non-infinite dividend, or
+ *                infinite dividend -- matching operand signs
+ *   3  -Inf      the same shapes -- differing operand signs
+ *   4  +0.0      infinite divisor with finite dividend -- matching signs
+ *   5  -0.0      the same shape -- differing signs
+ *   6  normal    finite / finite (non-zero divisor), a real number
+ *
+ * Guards are posted on the operands only, and mirror the Phi spec verbatim
+ * (each ±Inf / ±0 arm conjoins the operand sign relation that selects the
+ * result class).  A concrete class representative is pushed on the stack so
+ * downstream concrete execution (and symcrete replay) sees the correct IEEE
+ * 754 sign.  Note: per the spec, Inf/+-0 (infinite dividend, zero divisor)
+ * matches no arm below -- isInf(A) excludes it from the ±Inf zero-divisor
+ * disjunct -- and so falls through to the normal (Phi4) arm, e.g. as +-Inf.
  */
 public class DDIV extends gov.nasa.jpf.jvm.bytecode.DDIV {
+
+    private interface DClass { boolean test(double v); }
 
     @Override
     public Instruction execute(ThreadInfo th) {
@@ -63,131 +86,183 @@ public class DDIV extends gov.nasa.jpf.jvm.bytecode.DDIV {
         RealExpression sym_v2 = (RealExpression) sf.getOperandAttr(3);
         double v2 = sf.peekDouble(2);
 
-        // Concrete divisor: IEEE 754 handles 0, NaN and Inf natively in
-        // Java (x/0 = +-Inf, 0/0 = NaN), so defer to the concrete
-        // implementation.  If the dividend is symbolic, attach the
-        // symbolic result expression.
-        if (sym_v1 == null) {
-            Instruction next_insn = super.execute(th);
-            if (sym_v2 != null) // result is symbolic expression
-                sf.setLongOperandAttr(sym_v2._div(v1));
-            return next_insn;
+        // Both operands concrete: plain IEEE 754 division.
+        if (sym_v1 == null && sym_v2 == null) {
+            return super.execute(th);
         }
 
-        // Symbolic divisor: its IEEE 754 class determines the result.
-        // Explore the four mutually-exclusive cases as a choice.
+        // Symbolic result A/B, class-constrained by whichever arm is taken.
+        RealExpression resultExpr;
+        if (sym_v2 != null)
+            resultExpr = (sym_v1 != null) ? sym_v2._div(sym_v1) : sym_v2._div(v1);
+        else
+            resultExpr = sym_v1._div_reverse(v2);
+
         ChoiceGenerator<?> cg;
-        int choice;
 
         if (!th.isFirstStepInsn()) { // first time around
-            cg = new PCChoiceGenerator(SymbolicInstructionFactory.collect_constraints ? 1 : 4);
+            cg = new PCChoiceGenerator(SymbolicInstructionFactory.collect_constraints ? 1 : 6);
             ((PCChoiceGenerator) cg).setOffset(this.position);
             ((PCChoiceGenerator) cg).setMethodName(this.getMethodInfo().getFullName());
-            th.getVM().setNextChoiceGenerator(cg);
+            th.getVM().getSystemState().setNextChoiceGenerator(cg);
             return this;
         } else { // this is what really returns results
-            cg = th.getVM().getChoiceGenerator();
+            cg = th.getVM().getSystemState().getChoiceGenerator();
             assert (cg instanceof PCChoiceGenerator) : "expected PCChoiceGenerator, got: " + cg;
 
+            // A = dividend (sym_v2 / v2), B = divisor (sym_v1 / v1)
+            Op A = new Op(sym_v2, v2);
+            Op B = new Op(sym_v1, v1);
+
+            int choice;
             if (SymbolicInstructionFactory.collect_constraints) {
-                if (v1 == 0)
-                    choice = 0;
-                else if (Double.isNaN(v1))
-                    choice = 1;
-                else if (Double.isInfinite(v1))
-                    choice = 2;
-                else
-                    choice = 3;
-                ((PCChoiceGenerator) cg).select(choice);
+                // Replay the arm matching the concrete (random) trace.
+                choice = classify(v2, v1);
+                ((PCChoiceGenerator) cg).select(choice - 1);
             } else {
-                choice = (Integer) cg.getNextChoice();
+                choice = ((Integer) cg.getNextChoice()) + 1;
             }
-        }
 
-        PathCondition pc;
-        ChoiceGenerator<?> prev_cg = cg.getPreviousChoiceGeneratorOfType(PCChoiceGenerator.class);
+            PathCondition pc;
+            ChoiceGenerator<?> prev_cg = cg.getPreviousChoiceGeneratorOfType(PCChoiceGenerator.class);
 
-        if (prev_cg == null)
-            pc = new PathCondition();
-        else
-            pc = ((PCChoiceGenerator) prev_cg).getCurrentPC();
-
-        assert pc != null;
-
-        // ------------------------------------------------------------
-        // 4-branch choice generator for DDIV (IEEE 754 semantics).
-        //
-        // Java's floating-point division (double) does NOT throw
-        // ArithmeticException on division by zero — it yields +-Inf or
-        // NaN per IEEE 754.  The symbolic path condition must therefore
-        // explore all four mutually-exclusive cases for the divisor:
-        //
-        //   choice 0:  divisor == 0       -> EQ sym_v1 0
-        //   choice 1:  divisor is NaN     -> IS_NAN sym_v1
-        //   choice 2:  divisor is Inf     -> IS_INF sym_v1
-        //   choice 3:  normal divisor     -> NE sym_v1 0  ∧  NOT_IS_NAN sym_v1
-        //                                    ∧  NOT_IS_INF sym_v1
-        //
-        // The old code short-circuited div-by-zero by pushing 0.0,
-        // which was incorrect for IEEE 754 and prevented the symbolic
-        // engine from exploring paths that produce Infinity/NaN results.
-        //
-        // The result value is part of the choice: each branch computes
-        // the concrete result consistent with that branch's semantics,
-        // considering the dividend's IEEE 754 class as well.
-        // ------------------------------------------------------------
-        double resultValue;
-        if (choice == 0) { // zero divisor
-            pc._addDet(Comparator.EQ, sym_v1, 0);
-            // dividend 0 -> NaN, otherwise +-Inf (sign = sign(v2) ^ sign(v1))
-            if (v2 == 0)
-                resultValue = Double.NaN;
+            if (prev_cg == null)
+                pc = new PathCondition();
             else
-                resultValue = (Math.copySign(1.0, v1) * Math.copySign(1.0, v2) < 0)
-                        ? Double.NEGATIVE_INFINITY : Double.POSITIVE_INFINITY;
-        } else if (choice == 1) { // NaN divisor
-            pc._addDet(sym_v1, Comparator.IS_NAN);
-            resultValue = Double.NaN; // x/NaN = NaN
-        } else if (choice == 2) { // Inf divisor
-            pc._addDet(sym_v1, Comparator.IS_INF);
-            // Inf/Inf = NaN, otherwise +-0 (sign = sign(v2) ^ sign(v1))
-            if (Double.isInfinite(v2))
-                resultValue = Double.NaN;
-            else
-                resultValue = (Math.copySign(1.0, v1) * Math.copySign(1.0, v2) < 0)
-                        ? -0.0 : +0.0;
-        } else { // normal divisor (non-zero, non-NaN, non-Inf)
-            pc._addDet(Comparator.NE, sym_v1, 0);
-            pc._addDet(sym_v1, Comparator.NOT_IS_NAN);
-            pc._addDet(sym_v1, Comparator.NOT_IS_INF);
-            // Concrete division handles a special dividend natively
-            // (NaN/x = NaN, Inf/x = +-Inf, 0/x = +-0).
-            resultValue = v2 / v1;
-        }
+                pc = ((PCChoiceGenerator) prev_cg).getCurrentPC();
 
-            if (pc.simplify()) { // satisfiable
-                ((PCChoiceGenerator) cg).setCurrentPC(pc);
+            assert pc != null;
 
-            sf = th.getModifiableTopFrame();
-            sf.popDouble();
-            sf.popDouble();
-            sf.pushDouble(resultValue);
+            boolean reachable = apply(choice, pc, A, B);
 
-            // set the symbolic result
-                RealExpression result;
-                if (sym_v2 != null)
-                    result = sym_v2._div(sym_v1);
-                else
-                    result = sym_v1._div_reverse(v2);
+            double resultValue = resultValue(choice, v2, v1);
 
-                sf.setLongOperandAttr(result);
-                return getNext(th);
-
-            } else {
+            if (!reachable) { // concrete operand contradicts the arm
                 th.getVM().getSystemState().setIgnored(true);
                 return getNext(th);
             }
 
+            if (pc.simplify()) { // arm satisfiable under the operand bounds
+                ((PCChoiceGenerator) cg).setCurrentPC(pc);
+
+                sf = th.getModifiableTopFrame();
+                sf.popDouble();
+                sf.popDouble();
+                sf.pushDouble(resultValue);
+
+                sf.setLongOperandAttr(resultExpr);
+                return getNext(th);
+            } else { // infeasible arm (e.g. +-0 unreachable when divisor is bounded)
+                th.getVM().getSystemState().setIgnored(true);
+                return getNext(th);
+            }
+        }
     }
 
+    // Posts the guard of arm `choice` as unary *operand* predicates so the
+    // PC never contains an fp.div term.  Returns false if a concrete operand
+    // contradicts the arm (nothing is posted in that case).  The disjuncts
+    // mirror the Phi spec verbatim: each shape is conjoined with the operand
+    // sign relation (matching / differing) that determines the result class.
+    private static boolean apply(int choice, PathCondition pc, Op A, Op B) {
+        switch (choice) {
+        case 1: // Phi1 NaN: isNaN(A) || isNaN(B) || (isZero(A)&&isZero(B)) || (isInf(A)&&isInf(B))
+            return guard(pc, A.nan())
+                || guard(pc, A.notNan(), B.nan())
+                || guard(pc, A.zero(), B.zero())
+                || guard(pc, A.inf(), B.inf());
+        case 2: // Phi2a +Inf: (zero divisor, non-zero divd, non-inf divd) || (inf divd)
+                //            -- matching signs
+            return guard(pc, A.notNan(), B.notNan(), B.zero(), A.notZero(), A.notInf(), A.pos(), B.pos())
+                || guard(pc, A.notNan(), B.notNan(), B.zero(), A.notZero(), A.notInf(), A.neg(), B.neg())
+                || guard(pc, A.notNan(), B.notNan(), A.inf(), B.notInf(), B.notZero(), A.pos(), B.pos())
+                || guard(pc, A.notNan(), B.notNan(), A.inf(), B.notInf(), B.notZero(), A.neg(), B.neg());
+        case 3: // Phi2b -Inf: same shapes -- differing signs
+            return guard(pc, A.notNan(), B.notNan(), B.zero(), A.notZero(), A.notInf(), A.pos(), B.neg())
+                || guard(pc, A.notNan(), B.notNan(), B.zero(), A.notZero(), A.notInf(), A.neg(), B.pos())
+                || guard(pc, A.notNan(), B.notNan(), A.inf(), B.notInf(), B.notZero(), A.pos(), B.neg())
+                || guard(pc, A.notNan(), B.notNan(), A.inf(), B.notInf(), B.notZero(), A.neg(), B.pos());
+        case 4: // Phi3a +0.0: isInf(B) && !isInf(A) -- matching signs
+            return guard(pc, A.notNan(), B.notNan(), B.inf(), A.notInf(), A.pos(), B.pos())
+                || guard(pc, A.notNan(), B.notNan(), B.inf(), A.notInf(), A.neg(), B.neg());
+        case 5: // Phi3b -0.0: isInf(B) && !isInf(A) -- differing signs
+            return guard(pc, A.notNan(), B.notNan(), B.inf(), A.notInf(), A.pos(), B.neg())
+                || guard(pc, A.notNan(), B.notNan(), B.inf(), A.notInf(), A.neg(), B.pos());
+        default: // Phi4 normal: finite / finite (non-zero divisor)
+            return guard(pc, A.notNan(), B.notNan(), B.notZero(), A.notInf(), B.notInf());
+        }
+    }
+
+    // Concrete IEEE 754 class of v2/v1, mapped to the arm index.
+    private static int classify(double v2, double v1) {
+        double r = v2 / v1;
+        if (Double.isNaN(r))
+            return 1;
+        if (Double.isInfinite(r))
+            return r > 0 ? 2 : 3;
+        if (r == 0.0d)
+            return Double.doubleToRawLongBits(r) >= 0 ? 4 : 5;
+        return 6;
+    }
+
+    // The concrete class representative pushed on the stack for each arm.
+    private static double resultValue(int choice, double v2, double v1) {
+        switch (choice) {
+        case 1:
+            return Double.NaN;
+        case 2:
+            return Double.POSITIVE_INFINITY;
+        case 3:
+            return Double.NEGATIVE_INFINITY;
+        case 4:
+            return 0.0d;
+        case 5:
+            return -0.0d;
+        default:
+            return v2 / v1;
+        }
+    }
+
+    private static boolean isPos(double v) { return Double.doubleToRawLongBits(v) >= 0L && !Double.isNaN(v); }
+    private static boolean isNeg(double v) { return Double.doubleToRawLongBits(v) < 0L; }
+
+    // One operand's concrete value and, optionally, its symbolic expression.
+    private static final class Op {
+        final RealExpression sym; final double v;
+        Op(RealExpression s, double cv) { sym = s; v = cv; }
+        Pred nan()      { return new Pred(sym, v, Double::isNaN,      Comparator.IS_NAN,      true); }
+        Pred notNan()   { return new Pred(sym, v, Double::isNaN,      Comparator.IS_NAN,      false); }
+        Pred inf()      { return new Pred(sym, v, Double::isInfinite, Comparator.IS_INF,      true); }
+        Pred notInf()   { return new Pred(sym, v, Double::isInfinite, Comparator.IS_INF,      false); }
+        Pred zero()     { return new Pred(sym, v, z -> z == 0.0d,     Comparator.IS_ZERO,     true); }
+        Pred notZero()  { return new Pred(sym, v, z -> z == 0.0d,     Comparator.IS_ZERO,     false); }
+        Pred pos()      { return new Pred(sym, v, DDIV::isPos,        Comparator.IS_POSITIVE, true); }
+        Pred neg()      { return new Pred(sym, v, DDIV::isNeg,        Comparator.IS_NEGATIVE, true); }
+    }
+
+    // A single unary IEEE 754 class predicate.  With a symbolic operand
+    // (sym != null) it is posted to the path condition; with a concrete
+    // operand it is evaluated against the operand's value at build time.
+    private static final class Pred {
+        final RealExpression sym; final double v;
+        final DClass test; final Comparator cmp; final boolean take;
+        Pred(RealExpression s, double cv, DClass t, Comparator c, boolean take) {
+            sym = s; v = cv; test = t; cmp = c; this.take = take;
+        }
+        boolean holds() { return sym != null || test.test(v) == take; }
+        void post(PathCondition pc) { if (sym != null) pc._addDet(sym, take ? cmp : cmp.not()); }
+    }
+
+    // Conjunction of predicates: returns false if any concrete predicate is
+    // falsified, otherwise posts the symbolic predicates to the PC.  Two
+    // passes so a falsified concrete predicate never leaves partial posts.
+    // Used for a single arm's guard AND for the per-arm disjunction above
+    // (short-circuit returns on the first sub-guard that survives), so the
+    // OR of shapes is realized at the concrete/symbolic build level without
+    // any LogicalORRealConstraints machinery.
+    private static boolean guard(PathCondition pc, Pred... ps) {
+        for (Pred p : ps) if (!p.holds()) return false;
+        for (Pred p : ps) p.post(pc);
+        return true;
+    }
 }

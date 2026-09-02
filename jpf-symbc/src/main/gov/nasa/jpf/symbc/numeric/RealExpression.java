@@ -42,11 +42,6 @@ import static gov.nasa.jpf.symbc.numeric.Operator.*;
 
 public abstract class RealExpression extends Expression {
 
-	// Static RealExpression representing NaN, used when a symbolic
-	// FP division yields NaN (e.g., 0/0 or NaN/any).  Allows the
-	// path condition to reference NaN as a symbolic expression.
-	public static RealExpression NAN = new RealConstant(Float.NaN);
-
 	public RealExpression _minus_reverse (double i) 
 	{
 		return new BinaryRealExpression(new RealConstant(i), MINUS, this);

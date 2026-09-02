@@ -37,7 +37,6 @@
 
 package gov.nasa.jpf.symbc.numeric;
 
-import gov.nasa.jpf.symbc.numeric.Comparator;
 import java.util.Map;
 
 public abstract class Constraint implements Comparable<Constraint> {
@@ -56,21 +55,23 @@ public abstract class Constraint implements Comparable<Constraint> {
   }
   /**
    * Creates a unary constraint (no right operand).
-   * NaN/Inf checks (IS_NAN, NOT_IS_NAN, IS_INF, NOT_IS_INF)
-   * are predicates on a single expression — they do not compare
-   * two values.  Setting {@code right = null} distinguishes them
-   * from binary constraints (EQ, NE, LT, etc.) in {@link #compareTo}
-   * and {@link #toString}.
+   * NaN/Inf/sign/zero class predicates (IS_NAN, NOT_IS_NAN, IS_INF, NOT_IS_INF,
+   * IS_ZERO, NOT_IS_ZERO, IS_POSITIVE, IS_NEGATIVE) are predicates on a single
+   * expression — they do not compare two values.  Setting {@code right = null}
+   * distinguishes them from binary constraints (EQ, NE, LT, etc.) in
+   * {@link #compareTo} and {@link #toString}.
    *
    * @param l  the expression to test
-   * @param c  must be one of IS_NAN, NOT_IS_NAN, IS_INF, NOT_IS_INF
+   * @param c  must be one of the unary IEEE 754 class predicates
    */
   public Constraint(Expression l, Comparator c){
 	left = l;
 	comp = c;
 	right = null;
 	assert (c == Comparator.IS_NAN) || (c == Comparator.NOT_IS_NAN)
-		|| (c == Comparator.IS_INF) || (c == Comparator.NOT_IS_INF);
+		|| (c == Comparator.IS_INF) || (c == Comparator.NOT_IS_INF)
+		|| (c == Comparator.IS_ZERO) || (c == Comparator.NOT_IS_ZERO)
+		|| (c == Comparator.IS_POSITIVE) || (c == Comparator.IS_NEGATIVE);
   }
 
   /** Returns the left expression. Subclasses may override to give tighter type bounds.*/
@@ -106,8 +107,10 @@ public abstract class Constraint implements Comparable<Constraint> {
   }
 
   public String stringPC() {
-    return left.stringPC() + comp.toString() + right.stringPC()
-        + ((and == null) ? "" : " && " + and.stringPC());
+    String base = (right == null)
+        ? comp.toString() + "(" + left.stringPC() + ")"
+        : left.stringPC() + comp.toString() + right.stringPC();
+    return base + ((and == null) ? "" : " && " + and.stringPC());
   }
 
   public void getVarVals(Map<String,Object> varsVals) {
@@ -131,10 +134,14 @@ public abstract class Constraint implements Comparable<Constraint> {
     if (!(o instanceof Constraint)) {
       return false;
     }
-
-    return left.equals(((Constraint) o).left)
-        && comp.equals(((Constraint) o).comp)
-        && right.equals(((Constraint) o).right);
+    Constraint other = (Constraint) o;
+    if (left == null ? other.left != null : !left.equals(other.left)) {
+      return false;
+    }
+    if (comp != other.comp) {
+      return false;
+    }
+    return (right == null ? other.right == null : right.equals(other.right));
   }
 
   public int hashCode() {
@@ -176,7 +183,7 @@ public abstract class Constraint implements Comparable<Constraint> {
 				else if (c.getRight() == null)
 					r = 1;
 				else
-				r = right.compareTo(c.getRight());
+					r = right.compareTo(c.getRight());
 			}
 		}
 		return r;
@@ -202,17 +209,19 @@ public abstract class Constraint implements Comparable<Constraint> {
 	public void accept(ConstraintExpressionVisitor visitor) {
 		visitor.preVisit(this);
 		left.accept(visitor);
-		right.accept(visitor);
+		if (right != null) {
+			right.accept(visitor);
+		}
 		visitor.postVisit(this);
 	}
 
 	public String prefix_notation() {
-		//return left.toString() + comp.toString() + right.toString()
-		        //+ ((and == null) ? "" : " && " + and.toString()); -- for specialization
-		  //      + ((and == null) ? "" : " &&\n" + and.toString());
 		// Sang: rewrite NE in z3's notation: (a != b) becomes (not (= a b))
-		String result = null;
-		if (comp == Comparator.NE){
+		String result;
+		if (right == null) {
+			// unary comparator: (COMP left)
+			result = "(" + comp.toString() + " " + left.prefix_notation() + ")";
+		} else if (comp == Comparator.NE){
 			result = "(not ( = " + left.prefix_notation() + " " + right.prefix_notation() +"))";
 		}
 		else{
@@ -223,12 +232,12 @@ public abstract class Constraint implements Comparable<Constraint> {
 	}
 
 	public String prefix_notationPC4Z3() {
-		//return left.toString() + comp.toString() + right.toString()
-		        //+ ((and == null) ? "" : " && " + and.toString()); -- for specialization
-		  //      + ((and == null) ? "" : " &&\n" + and.toString());
 		// Sang: rewrite NE in z3's notation: (a != b) becomes (not (= a b))
-		String result = null;
-		if (comp == Comparator.NE){
+		String result;
+		if (right == null) {
+			// unary comparator: (assert (COMP left))
+			result = "(assert (" + comp.toString() + " " + left.prefix_notation() + "))";
+		} else if (comp == Comparator.NE){
 			result = "(assert (not ( = " + left.prefix_notation() + " " + right.prefix_notation() +")))";
 		}
 		else{
