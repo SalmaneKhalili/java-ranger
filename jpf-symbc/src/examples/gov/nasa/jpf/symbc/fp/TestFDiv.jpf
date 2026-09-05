@@ -5,8 +5,9 @@ jvm.insn_factory.class=gov.nasa.jpf.symbc.SymbolicInstructionFactory
 
 # SMT Settings
 symbolic.dp=z3bitvector
-symbolic.bvlength=32
+symbolic.bvlength=64
 symbolic.fp=true
+symbolic.inf=true
 
 # Domain bounds
 symbolic.min_int=-2147483648

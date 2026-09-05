@@ -1,5 +1,5 @@
 classpath = /home/salmane/IdeaProjects/java-ranger/jpf-symbc/build/examples
-target = gov.nasa.jpf.symbc.fp.TestDDiv
+target = gov.nasa.jpf.symbc.fp.TestDDivSymSym
 
 jvm.insn_factory.class=gov.nasa.jpf.symbc.SymbolicInstructionFactory
 
