@@ -84,9 +84,9 @@ import za.ac.sun.cs.green.expr.RealVariable;
  * The arm formulas are load-bearing: a path whose arm Phi does not hold is
  * unsatisfiable and pruned by pc.simplify() in execute().  The Inf/(+-0) corner
  * (infinite dividend, zero divisor) is +-Inf under IEEE 754's sign rule, so it
- * is an extra disjunct in choices 2/3.  Choice 1 (NaN) cannot bind result ==
- * NaN by equality -- fp.eq makes it unsatisfiable (NaN != NaN) -- it binds via
- * the isNaN(result) predicate instead.
+ * is an extra disjunct in choices 2/3.  Choice 1 (NaN) is a pure operand-class
+ * precondition with no result binding (fp.eq makes result == NaN unsatisfiable);
+ * execute() pushes a concrete NaN for it.
  */
 public class FDIV extends gov.nasa.jpf.jvm.bytecode.FDIV {
 
@@ -148,8 +148,7 @@ public class FDIV extends gov.nasa.jpf.jvm.bytecode.FDIV {
         // Bind the result by the chosen arm's flat Phi formula (class javadoc):
         // operand-class predicates conjoined with result == <class>.  A
         // mismatched arm is unsatisfiable and dropped below.  The NaN arm
-        // (choice 1) binds via the isNaN(result) predicate -- fp.eq makes
-        // result == NaN unsatisfiable.
+        // (choice 1) is a pure operand precondition and pushes a concrete NaN.
         String varId = "fdiv_" + resultCounter++;
         Expression resultGreen = ExprUtil.createGreenVar("float", varId);
         Expression identity = buildArmForChoice(choice, resultGreen, gA, gB);
@@ -162,7 +161,8 @@ public class FDIV extends gov.nasa.jpf.jvm.bytecode.FDIV {
             sf.popFloat();
             sf.popFloat();
             sf.pushFloat(resultValue(choice, v2, v1));
-            sf.setOperandAttr(new SymbolicReal(varId, SYM_MIN, SYM_MAX));
+            if (choice != 1)
+                sf.setOperandAttr(new SymbolicReal(varId, SYM_MIN, SYM_MAX));
             return getNext(th);
         } else { // infeasible arm
             th.getVM().getSystemState().setIgnored(true);
@@ -178,13 +178,13 @@ public class FDIV extends gov.nasa.jpf.jvm.bytecode.FDIV {
     // unsatisfiable and pruned by pc.simplify() in execute().  Only the normal
     // arm (choice 6) carries an fp.div term.
 
-    // Choice 1 (NaN).  Bound by the isNaN(result) predicate, not an equality:
-    // fp.eq makes result == NaN unsatisfiable (IEEE 754: NaN != NaN).
-    private static Expression buildNaN(Expression result, Expression gA, Expression gB) {
-        return and(new FPClassExpr(result, Comparator.IS_NAN),
-                or(isNan(gA), isNan(gB),
-                   and(isZero(gA), isZero(gB)),
-                   and(isInf(gA), isInf(gB))));
+    // Choice 1 (NaN).  Pure operand-class precondition -- NaN, 0/0, and Inf/Inf
+    // yield NaN under IEEE 754.  The result is not bound here (fp.eq makes
+    // result == NaN unsatisfiable); execute() pushes a concrete NaN.
+    private static Expression buildNaN(Expression gA, Expression gB) {
+        return or(isNan(gA), isNan(gB),
+                and(isZero(gA), isZero(gB)),
+                and(isInf(gA), isInf(gB)));
     }
 
     // Choice 2 (+Inf).  The third guard disjunct is the (Inf)/(0) corner --
@@ -230,7 +230,7 @@ public class FDIV extends gov.nasa.jpf.jvm.bytecode.FDIV {
 
     private static Expression buildArmForChoice(int choice, Expression result, Expression gA, Expression gB) {
         switch (choice) {
-        case 1: return buildNaN(result, gA, gB);
+        case 1: return buildNaN(gA, gB);
         case 2: return buildPosInf(result, gA, gB);
         case 3: return buildNegInf(result, gA, gB);
         case 4: return buildPosZero(result, gA, gB);
