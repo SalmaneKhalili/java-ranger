@@ -821,6 +821,8 @@ public class ProblemZ3BitVector extends ProblemGeneral {
                 return ctx.mkBVMul((BitVecExpr) exp1, (BitVecExpr) exp2);
             } else if (exp1 instanceof IntExpr && exp2 instanceof IntExpr) {
                 return ctx.mkMul((IntExpr) exp1, (IntExpr) exp2);
+            } else if (exp1 instanceof RealExpr && exp2 instanceof RealExpr) {
+                return ctx.mkMul((RealExpr) exp1, (RealExpr) exp2);
             } else if (exp1 instanceof FPExpr && exp2 instanceof FPExpr) {
                 return ctx.mkFPMul(ctx.mkFPRoundNearestTiesToEven(), (FPExpr) exp1, (FPExpr) exp2);}
                 else{
@@ -879,8 +881,10 @@ public class ProblemZ3BitVector extends ProblemGeneral {
                 return ctx.mkBVSDiv((BitVecExpr) exp1, (BitVecExpr) exp2);
             } else if (exp1 instanceof IntExpr && exp2 instanceof IntExpr) {
                 return ctx.mkDiv((IntExpr) exp1, (IntExpr) exp2);
-            } else if (useFpForReals) {
-                return ctx.mkFPDiv(ctx.mkFPRoundNearestTiesToEven(),(FPExpr) exp1, (FPExpr) exp2);
+            } else if (exp1 instanceof RealExpr && exp2 instanceof RealExpr) {
+                return ctx.mkDiv((RealExpr) exp1, (RealExpr) exp2);
+            } else if (exp1 instanceof FPExpr && exp2 instanceof FPExpr) {
+                return ctx.mkFPDiv(ctx.mkFPRoundNearestTiesToEven(), (FPExpr) exp1, (FPExpr) exp2);
             } else {
                 throw new RuntimeException();
             }
@@ -895,6 +899,8 @@ public class ProblemZ3BitVector extends ProblemGeneral {
         try {
             if (exp instanceof BitVecExpr) {
                 return ctx.mkBVSRem((BitVecExpr) exp, ctx.mkBV(value, this.bitVectorLength));
+            } else if (exp instanceof IntExpr) {
+                return ctx.mkRem((IntExpr) exp, ctx.mkInt(value));
             } else {
                 throw new RuntimeException();
             }
@@ -909,6 +915,8 @@ public class ProblemZ3BitVector extends ProblemGeneral {
         try {
             if (exp instanceof BitVecExpr) {
                 return ctx.mkBVSRem(ctx.mkBV(value, this.bitVectorLength), (BitVecExpr) exp);
+            } else if (exp instanceof IntExpr) {
+                return ctx.mkRem(ctx.mkInt(value), (IntExpr) exp);
             } else {
                 throw new RuntimeException();
             }
@@ -922,6 +930,8 @@ public class ProblemZ3BitVector extends ProblemGeneral {
         try {
             if (exp1 instanceof BitVecExpr && exp2 instanceof BitVecExpr) {
                 return ctx.mkBVSRem((BitVecExpr) exp1, (BitVecExpr) exp2);
+            } else if (exp1 instanceof IntExpr && exp2 instanceof IntExpr) {
+                return ctx.mkRem((IntExpr) exp1, (IntExpr) exp2);
             } else {
                 throw new RuntimeException();
             }
@@ -936,6 +946,8 @@ public class ProblemZ3BitVector extends ProblemGeneral {
         try {
             if (exp instanceof BitVecExpr) {
                 return ctx.mkBVSMod((BitVecExpr) exp, ctx.mkBV(value, this.bitVectorLength));
+            } else if (exp instanceof IntExpr) {
+                return ctx.mkMod((IntExpr) exp, ctx.mkInt(value));
             } else {
                 throw new RuntimeException();
             }
@@ -950,6 +962,8 @@ public class ProblemZ3BitVector extends ProblemGeneral {
         try {
             if (exp instanceof BitVecExpr) {
                 return ctx.mkBVSMod(ctx.mkBV(value, this.bitVectorLength), (BitVecExpr) exp);
+            } else if (exp instanceof IntExpr) {
+                return ctx.mkMod(ctx.mkInt(value), (IntExpr) exp);
             } else {
                 throw new RuntimeException();
             }
@@ -963,6 +977,8 @@ public class ProblemZ3BitVector extends ProblemGeneral {
         try {
             if (exp1 instanceof BitVecExpr && exp2 instanceof BitVecExpr) {
                 return ctx.mkBVSMod((BitVecExpr) exp1, (BitVecExpr) exp2);
+            } else if (exp1 instanceof IntExpr && exp2 instanceof IntExpr) {
+                return ctx.mkMod((IntExpr) exp1, (IntExpr) exp2);
             } else {
                 throw new RuntimeException();
             }
@@ -1762,8 +1778,7 @@ public class ProblemZ3BitVector extends ProblemGeneral {
 
     @Override
     public double getRealValueSup(Object dpVar) {
-        // TODO Auto-generated method stub
-        throw new RuntimeException("## Error Z3 \n");// return 0;
+        return getRealValueInf(dpVar);
     }
 
     @Override
@@ -1774,18 +1789,14 @@ public class ProblemZ3BitVector extends ProblemGeneral {
     @Override
     public void postLogicalOR(Object[] constraint) {
         try {
-            if (useFpForReals) {
-                BoolExpr[] exprs = new BoolExpr[constraint.length];
-                for (int i = 0; i < constraint.length; i++) {
-                    exprs[i] = (BoolExpr) constraint[i];
-                }
-                solver.add(ctx.mkOr(exprs));
-            } else {
-                throw new RuntimeException("## Error Z3: postLogicalOR requires floating-point mode");
+            BoolExpr[] exprs = new BoolExpr[constraint.length];
+            for (int i = 0; i < constraint.length; i++) {
+                exprs[i] = (BoolExpr) constraint[i];
             }
+            solver.add(ctx.mkOr(exprs));
         } catch (Exception e) {
             e.printStackTrace();
-            throw new RuntimeException("## Error Z3: postLogicalOR(Object[]) failed.\n" + e);
+            throw new RuntimeException("## Error Z3: postLogicalOR() failed.\n" + e);
         }
     }
 }
