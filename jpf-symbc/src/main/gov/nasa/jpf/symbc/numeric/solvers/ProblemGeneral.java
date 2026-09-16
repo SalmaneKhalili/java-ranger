@@ -119,6 +119,7 @@ public abstract class ProblemGeneral{
 	public abstract Object shiftR(Object exp, long value) ;
 	public abstract Object shiftR(Object exp1, Object exp2) ;
 
+
 	public abstract Object shiftUR(long value, Object exp) ;
 	public abstract Object shiftUR(Object exp, long value) ;
 	public abstract Object shiftUR(Object exp1, Object exp2) ;

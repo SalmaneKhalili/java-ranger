@@ -45,7 +45,7 @@ public enum Comparator {
    LE(" <= ") { public Comparator not() { return GT; }},
    GT(" > ")  { public Comparator not() { return LE; }},
    GE(" >= ") { public Comparator not() { return LT; }},
-   // Unary comparators — these operate on a single expression
+   // Unary comparators: these operate on a single expression
    // (right operand is null in Constraint).  Used by the NaN/Inf
    // FDIV/DDIV branch support.
    IS_NAN(" IS_NAN ") { public Comparator not() { return NOT_IS_NAN; }},
@@ -57,17 +57,17 @@ public enum Comparator {
    IS_POSITIVE(" IS_POSITIVE ") { public Comparator not() { return IS_NEGATIVE; }},
    IS_NEGATIVE(" IS_NEGATIVE ") { public Comparator not() { return IS_POSITIVE; }};
 
-	private final String str;
+   private final String str;
 
-   Comparator(String str) {
-       this.str = str;
+   Comparator(String str){
+	   this.str= str;
    }
-
+   
    public abstract Comparator not();
-
+   
    @Override
    public String toString() {
-       return str;
+	 return str;
    }
 
 	/**
@@ -95,7 +95,6 @@ public enum Comparator {
 		case GE:
 			return left >= right;
 		default:
-			assert false : "Not expecting to evaluate a unary comparator with two arguments";
 			return false;
 		}
 	}
@@ -114,12 +113,10 @@ public enum Comparator {
 			case NOT_IS_ZERO:
 				return x != 0;
 			case IS_POSITIVE:
-				// IEEE 754 sign: +0.0 is positive, -0.0 is not
 				return (Double.doubleToRawLongBits(x) & 0x8000000000000000L) == 0L && !Double.isNaN(x);
 			case IS_NEGATIVE:
 				return (Double.doubleToRawLongBits(x) & 0x8000000000000000L) != 0L;
 			default:
-				assert false : "Not expecting to evaluate a binary comparator with one argument";
 				return false;
 		}
 	}
