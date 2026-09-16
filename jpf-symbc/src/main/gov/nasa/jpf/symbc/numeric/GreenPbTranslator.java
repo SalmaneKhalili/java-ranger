@@ -316,10 +316,10 @@ class GreenPbTranslator extends Visitor {
                 case NOT_IS_NAN:
                     stack.push((Expr) context.logical_not(context.isNan(operand)));
                     break;
-                case IS_INF:
+                case IS_INFINITY:
                     stack.push((Expr) context.isInf(operand));
                     break;
-                case NOT_IS_INF:
+                case NOT_IS_INFINITY:
                     stack.push((Expr) context.logical_not(context.isInf(operand)));
                     break;
                 case IS_ZERO:

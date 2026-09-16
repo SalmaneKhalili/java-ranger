@@ -46,30 +46,28 @@ public enum Comparator {
    GT(" > ")  { public Comparator not() { return LE; }},
    GE(" >= ") { public Comparator not() { return LT; }},
    // Unary comparators — these operate on a single expression
-   // (right operand is null in Constraint).  Used by the NaN/Inf/zero/sign
-   // class predicates of the FDIV/DDIV outcome encoding.  IS_POSITIVE /
-   // IS_NEGATIVE follow the IEEE 754 sign bit: +0.0 is positive, -0.0 is
-   // negative.
+   // (right operand is null in Constraint).  Used by the NaN/Inf
+   // FDIV/DDIV branch support.
    IS_NAN(" IS_NAN ") { public Comparator not() { return NOT_IS_NAN; }},
    NOT_IS_NAN(" NOT_IS_NAN ") { public Comparator not() { return IS_NAN; }},
-   IS_INF(" IS_INF ") { public Comparator not() { return NOT_IS_INF; }},
-   NOT_IS_INF(" NOT_IS_INF ") { public Comparator not() { return IS_INF; }},
+   IS_INFINITY(" IS_INFINITY ") { public Comparator not() { return NOT_IS_INFINITY; }},
+   NOT_IS_INFINITY(" NOT_IS_INFINITY ") { public Comparator not() { return IS_INFINITY; }},
    IS_ZERO(" IS_ZERO ") { public Comparator not() { return NOT_IS_ZERO; }},
    NOT_IS_ZERO(" NOT_IS_ZERO ") { public Comparator not() { return IS_ZERO; }},
    IS_POSITIVE(" IS_POSITIVE ") { public Comparator not() { return IS_NEGATIVE; }},
    IS_NEGATIVE(" IS_NEGATIVE ") { public Comparator not() { return IS_POSITIVE; }};
 
-   private final String str;
+	private final String str;
 
-   Comparator(String str){
-	   this.str= str;
+   Comparator(String str) {
+       this.str = str;
    }
-   
+
    public abstract Comparator not();
-   
+
    @Override
    public String toString() {
-	 return str;
+       return str;
    }
 
 	/**
@@ -107,9 +105,9 @@ public enum Comparator {
 				return Double.isNaN(x);
 			case NOT_IS_NAN:
 				return !Double.isNaN(x);
-			case IS_INF:
+			case IS_INFINITY:
 				return Double.isInfinite(x);
-			case NOT_IS_INF:
+			case NOT_IS_INFINITY:
 				return !Double.isInfinite(x);
 			case IS_ZERO:
 				return x == 0;
@@ -122,7 +120,7 @@ public enum Comparator {
 				return (Double.doubleToRawLongBits(x) & 0x8000000000000000L) != 0L;
 			default:
 				assert false : "Not expecting to evaluate a binary comparator with one argument";
-			return false;
+				return false;
 		}
 	}
 }

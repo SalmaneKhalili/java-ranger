@@ -65,7 +65,7 @@ import za.ac.sun.cs.green.expr.RealVariable;
  * harness cannot solve efficiently:
  *
  *   1  NaN       isNaN(A) || isNaN(B) || (isZero(A)&&isZero(B)) ||
- *                (isInf(A)&&isInf(B))
+ *                (isInfinity(A)&&isInfinity(B))
  *   2  +Inf      zero divisor with non-zero, non-infinite dividend, or
  *                infinite dividend -- matching operand signs
  *   3  -Inf      the same shapes -- differing operand signs
@@ -188,16 +188,16 @@ public class DDIV extends gov.nasa.jpf.jvm.bytecode.DDIV {
     private static Expression buildNaN(Expression gA, Expression gB) {
         return or(isNan(gA), isNan(gB),
                 and(isZero(gA), isZero(gB)),
-                and(isInf(gA), isInf(gB)));
+                and(isInfinity(gA), isInfinity(gB)));
     }
 
     // Choice 2 (+Inf).  The third guard disjunct is the (Inf)/(0) corner --
     // +Inf under IEEE 754's sign rule (JVM: x/0 = +-Inf).
     private static Expression buildPosInf(Expression result, Expression gA, Expression gB) {
         return and(notNan(gA), notNan(gB),
-                or(and(isZero(gB), notZero(gA), notInf(gA)),
-                   and(isInf(gA), notInf(gB), notZero(gB)),
-                   and(isInf(gA), isZero(gB))),
+                or(and(isZero(gB), notZero(gA), notInfinity(gA)),
+                   and(isInfinity(gA), notInfinity(gB), notZero(gB)),
+                   and(isInfinity(gA), isZero(gB))),
                 sameSign(gA, gB),
                 eq(result, constOf(RealExpression.POS_INF)));
     }
@@ -205,30 +205,30 @@ public class DDIV extends gov.nasa.jpf.jvm.bytecode.DDIV {
     // Choice 3 (-Inf).
     private static Expression buildNegInf(Expression result, Expression gA, Expression gB) {
         return and(notNan(gA), notNan(gB),
-                or(and(isZero(gB), notZero(gA), notInf(gA)),
-                   and(isInf(gA), notInf(gB), notZero(gB)),
-                   and(isInf(gA), isZero(gB))),
+                or(and(isZero(gB), notZero(gA), notInfinity(gA)),
+                   and(isInfinity(gA), notInfinity(gB), notZero(gB)),
+                   and(isInfinity(gA), isZero(gB))),
                 diffSign(gA, gB),
                 eq(result, constOf(RealExpression.NEG_INF)));
     }
 
     // Choice 4 (+0.0).
     private static Expression buildPosZero(Expression result, Expression gA, Expression gB) {
-        return and(notNan(gA), notNan(gB), isInf(gB), notInf(gA),
+        return and(notNan(gA), notNan(gB), isInfinity(gB), notInfinity(gA),
                 sameSign(gA, gB),
                 eq(result, constOf(RealExpression.POS_ZERO)));
     }
 
     // Choice 5 (-0.0).
     private static Expression buildNegZero(Expression result, Expression gA, Expression gB) {
-        return and(notNan(gA), notNan(gB), isInf(gB), notInf(gA),
+        return and(notNan(gA), notNan(gB), isInfinity(gB), notInfinity(gA),
                 diffSign(gA, gB),
                 eq(result, constOf(RealExpression.NEG_ZERO)));
     }
 
     // Choice 6 (normal) -- the only arm carrying an fp.div term.
     private static Expression buildNormal(Expression result, Expression gA, Expression gB) {
-        return and(notNan(gA), notNan(gB), notZero(gB), notInf(gA), notInf(gB),
+        return and(notNan(gA), notNan(gB), notZero(gB), notInfinity(gA), notInfinity(gB),
                 eq(result, new Operation(Operation.Operator.DIV, gA, gB)));
     }
 
@@ -264,8 +264,8 @@ public class DDIV extends gov.nasa.jpf.jvm.bytecode.DDIV {
     private static Expression notNan(Expression e)  { return new FPClassExpr(e, Comparator.NOT_IS_NAN); }
     private static Expression isZero(Expression e)  { return new FPClassExpr(e, Comparator.IS_ZERO); }
     private static Expression notZero(Expression e) { return new FPClassExpr(e, Comparator.NOT_IS_ZERO); }
-    private static Expression isInf(Expression e)   { return new FPClassExpr(e, Comparator.IS_INF); }
-    private static Expression notInf(Expression e)  { return new FPClassExpr(e, Comparator.NOT_IS_INF); }
+    private static Expression isInfinity(Expression e)   { return new FPClassExpr(e, Comparator.IS_INFINITY); }
+    private static Expression notInfinity(Expression e)  { return new FPClassExpr(e, Comparator.NOT_IS_INFINITY); }
     private static Expression isPos(Expression e)   { return new FPClassExpr(e, Comparator.IS_POSITIVE); }
     private static Expression isNeg(Expression e)   { return new FPClassExpr(e, Comparator.IS_NEGATIVE); }
 
